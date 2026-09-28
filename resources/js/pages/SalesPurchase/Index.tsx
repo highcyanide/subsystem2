@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { Head, router, Link } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
-import { 
-    Search, 
-    Star, 
-    Plus, 
-    Calendar, 
-    ArrowLeft, 
-    Trash2, 
-    Edit2, 
-    DollarSign, 
+import {
+    Search,
+    Star,
+    Plus,
+    Calendar,
+    ArrowLeft,
+    Trash2,
+    Edit2,
+    DollarSign,
     Calculator,
     Check,
     X,
@@ -17,8 +17,52 @@ import {
     Layers,
     Boxes,
     Building2,
-    CheckCircle2
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
+
+const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const getDaysInMonth = (year: number, month: number) => {
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevDaysInMonth = new Date(year, month, 0).getDate();
+
+    const days: { day: number; isCurrentMonth: boolean; dateStr: string }[] = [];
+
+    for (let i = firstDay - 1; i >= 0; i--) {
+        days.push({
+            day: prevDaysInMonth - i,
+            isCurrentMonth: false,
+            dateStr: '',
+        });
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        days.push({
+            day: d,
+            isCurrentMonth: true,
+            dateStr: dateStr,
+        });
+    }
+
+    const totalSlots = Math.ceil(days.length / 7) * 7;
+    const nextDaysCount = totalSlots - days.length;
+    for (let n = 1; n <= nextDaysCount; n++) {
+        days.push({
+            day: n,
+            isCurrentMonth: false,
+            dateStr: '',
+        });
+    }
+
+    return days;
+};
 
 interface Distributor {
     id: number;
@@ -78,7 +122,10 @@ interface Props {
     availableDates: string[];
     filters: {
         search: string;
-        date: string;
+        date?: string;
+        start_date?: string;
+        end_date?: string;
+        month?: string;
     };
 }
 
@@ -98,6 +145,197 @@ export default function SalesPurchaseIndex({
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
 
+    // Date Filter Modal Calendar state (Supports Single Date, Per Month, Date Range)
+    const [isDateModalOpen, setIsDateModalOpen] = useState(false);
+    const [filterTab, setFilterTab] = useState<'single' | 'month' | 'range'>('single');
+
+    // Temporary modal selection states
+    const [tempSingleDate, setTempSingleDate] = useState(filters.date || '');
+    const [tempMonth, setTempMonth] = useState(filters.month || '');
+    const [tempStartDate, setTempStartDate] = useState(filters.start_date || '');
+    const [tempEndDate, setTempEndDate] = useState(filters.end_date || '');
+
+    // Custom Day Range inputs (ex: Day 4 to Day 27)
+    const [rangeStartDay, setRangeStartDay] = useState<string>('4');
+    const [rangeEndDay, setRangeEndDay] = useState<string>('27');
+
+    const [calendarYear, setCalendarYear] = useState(() => {
+        if (filters.start_date) return parseInt(filters.start_date.split('-')[0]);
+        if (filters.month) return parseInt(filters.month.split('-')[0]);
+        if (filters.date) return parseInt(filters.date.split('-')[0]);
+        return new Date().getFullYear();
+    });
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        if (filters.start_date) return parseInt(filters.start_date.split('-')[1]) - 1;
+        if (filters.month) return parseInt(filters.month.split('-')[1]) - 1;
+        if (filters.date) return parseInt(filters.date.split('-')[1]) - 1;
+        return new Date().getMonth();
+    });
+
+    const isFilterActive = !!(filters.date || filters.start_date || filters.end_date || filters.month);
+
+    const getActiveFilterLabel = () => {
+        if (filters.start_date && filters.end_date) {
+            return `${formatDateDisplay(filters.start_date)} – ${formatDateDisplay(filters.end_date)}`;
+        }
+        if (filters.month) {
+            const parts = filters.month.split('-');
+            if (parts.length === 2) {
+                return `${MONTH_NAMES[parseInt(parts[1]) - 1]} ${parts[0]}`;
+            }
+        }
+        if (filters.date) {
+            if (filters.date.includes('..')) {
+                const [s, e] = filters.date.split('..');
+                return `${formatDateDisplay(s)} – ${formatDateDisplay(e)}`;
+            }
+            if (filters.date.length === 7) {
+                const parts = filters.date.split('-');
+                if (parts.length === 2) {
+                    return `${MONTH_NAMES[parseInt(parts[1]) - 1]} ${parts[0]}`;
+                }
+            }
+            return formatDateDisplay(filters.date);
+        }
+        return 'All Purchase Dates';
+    };
+
+    const prevMonth = () => {
+        if (calendarMonth === 0) {
+            setCalendarMonth(11);
+            setCalendarYear(y => y - 1);
+        } else {
+            setCalendarMonth(m => m - 1);
+        }
+    };
+
+    const nextMonth = () => {
+        if (calendarMonth === 11) {
+            setCalendarMonth(0);
+            setCalendarYear(y => y + 1);
+        } else {
+            setCalendarMonth(m => m + 1);
+        }
+    };
+
+    const openDateFilterModal = () => {
+        if (filters.start_date && filters.end_date) {
+            setFilterTab('range');
+            setTempStartDate(filters.start_date);
+            setTempEndDate(filters.end_date);
+        } else if (filters.month) {
+            setFilterTab('month');
+            setTempMonth(filters.month);
+            const parts = filters.month.split('-');
+            if (parts.length === 2) {
+                setCalendarYear(parseInt(parts[0]));
+                setCalendarMonth(parseInt(parts[1]) - 1);
+            }
+        } else if (filters.date && filters.date.includes('..')) {
+            setFilterTab('range');
+            const [s, e] = filters.date.split('..');
+            setTempStartDate(s);
+            setTempEndDate(e);
+        } else if (filters.date && filters.date.length === 7) {
+            setFilterTab('month');
+            setTempMonth(filters.date);
+        } else {
+            setFilterTab('single');
+            setTempSingleDate(filters.date || '');
+        }
+        setIsDateModalOpen(true);
+    };
+
+    const handleClearAllDateFilters = () => {
+        setSelectedDate('');
+        router.get('/sales-purchase', {
+            distributor_id: selectedDistributor?.id,
+            search: searchQuery,
+            date: '',
+            start_date: '',
+            end_date: '',
+            month: ''
+        }, { preserveState: true });
+    };
+
+    const handleApplyModalFilter = () => {
+        setIsDateModalOpen(false);
+
+        if (filterTab === 'single') {
+            router.get('/sales-purchase', {
+                distributor_id: selectedDistributor?.id,
+                search: searchQuery,
+                date: tempSingleDate,
+                start_date: '',
+                end_date: '',
+                month: ''
+            }, { preserveState: true });
+        } else if (filterTab === 'month') {
+            const mVal = tempMonth || `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+            router.get('/sales-purchase', {
+                distributor_id: selectedDistributor?.id,
+                search: searchQuery,
+                month: mVal,
+                date: '',
+                start_date: '',
+                end_date: ''
+            }, { preserveState: true });
+        } else if (filterTab === 'range') {
+            if (tempStartDate && tempEndDate) {
+                router.get('/sales-purchase', {
+                    distributor_id: selectedDistributor?.id,
+                    search: searchQuery,
+                    start_date: tempStartDate,
+                    end_date: tempEndDate,
+                    date: '',
+                    month: ''
+                }, { preserveState: true });
+            } else if (tempStartDate) {
+                router.get('/sales-purchase', {
+                    distributor_id: selectedDistributor?.id,
+                    search: searchQuery,
+                    date: tempStartDate,
+                    start_date: '',
+                    end_date: '',
+                    month: ''
+                }, { preserveState: true });
+            } else {
+                handleClearAllDateFilters();
+            }
+        }
+    };
+
+    const handleDayClickInCalendar = (dateStr: string) => {
+        if (filterTab === 'single') {
+            setTempSingleDate(dateStr);
+        } else if (filterTab === 'range') {
+            if (!tempStartDate || (tempStartDate && tempEndDate)) {
+                setTempStartDate(dateStr);
+                setTempEndDate('');
+            } else {
+                if (dateStr < tempStartDate) {
+                    setTempEndDate(tempStartDate);
+                    setTempStartDate(dateStr);
+                } else {
+                    setTempEndDate(dateStr);
+                }
+            }
+        }
+    };
+
+    const applyQuickDayNumberRange = (sDay: number, eDay: number) => {
+        const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+        const validStart = Math.max(1, Math.min(sDay, daysInMonth));
+        const validEnd = Math.max(validStart, Math.min(eDay, daysInMonth));
+
+        const sStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(validStart).padStart(2, '0')}`;
+        const eStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(validEnd).padStart(2, '0')}`;
+
+        setFilterTab('range');
+        setTempStartDate(sStr);
+        setTempEndDate(eStr);
+    };
+
     // Form state for new/edited purchase
     const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
     const [formProductId, setFormProductId] = useState<number | ''>('');
@@ -109,19 +347,19 @@ export default function SalesPurchaseIndex({
     // Search distributor handler
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        router.get('/sales-purchase', { 
-            distributor_id: selectedDistributor?.id, 
-            search: searchQuery, 
-            date: selectedDate 
+        router.get('/sales-purchase', {
+            distributor_id: selectedDistributor?.id,
+            search: searchQuery,
+            date: selectedDate
         }, { preserveState: true });
     };
 
     const handleDateFilterChange = (dateVal: string) => {
         setSelectedDate(dateVal);
-        router.get('/sales-purchase', { 
-            distributor_id: selectedDistributor?.id, 
-            search: searchQuery, 
-            date: dateVal 
+        router.get('/sales-purchase', {
+            distributor_id: selectedDistributor?.id,
+            search: searchQuery,
+            date: dateVal
         }, { preserveState: true });
     };
 
@@ -399,7 +637,7 @@ export default function SalesPurchaseIndex({
             ) : (
                 /* CHOSEN DISTRIBUTOR SALES & PURCHASE VIEW (Excel Table Header style as in Screenshot) */
                 <div className="space-y-6 animate-fade-in">
-                    
+
                     {/* Top Summary Stats Bar */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md">
@@ -430,24 +668,33 @@ export default function SalesPurchaseIndex({
                                 <Calendar className="h-4 w-4 text-emerald-400" />
                                 <span>Filter Date:</span>
                             </div>
-                            
-                            <select
-                                value={selectedDate}
-                                onChange={(e) => handleDateFilterChange(e.target.value)}
-                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                            >
-                                <option value="">All Purchase Dates</option>
-                                {availableDates.map(d => (
-                                    <option key={d} value={d}>{formatDateDisplay(d)}</option>
-                                ))}
-                            </select>
 
-                            {selectedDate && (
+                            <button
+                                type="button"
+                                onClick={openDateFilterModal}
+                                className="inline-flex items-center space-x-2.5 bg-slate-950 border border-slate-700 hover:border-emerald-500 rounded-lg px-3.5 py-2 text-xs text-white transition focus:outline-none shadow-sm group"
+                            >
+                                <Calendar className="h-3.5 w-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                                <span className="font-semibold text-slate-200">
+                                    {getActiveFilterLabel()}
+                                </span>
+                                {availableDates.length > 0 && (
+                                    <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800/80">
+                                        {availableDates.length} {availableDates.length === 1 ? 'date' : 'dates'}
+                                    </span>
+                                )}
+                                <Filter className="h-3 w-3 text-slate-400 group-hover:text-emerald-400 transition-colors ml-1" />
+                            </button>
+
+                            {isFilterActive && (
                                 <button
-                                    onClick={() => handleDateFilterChange('')}
-                                    className="text-xs text-slate-400 hover:text-slate-200 underline"
+                                    type="button"
+                                    onClick={handleClearAllDateFilters}
+                                    className="text-xs text-slate-400 hover:text-rose-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-950 border border-slate-800 hover:border-rose-900 transition"
+                                    title="Clear date filter"
                                 >
-                                    Clear Filter
+                                    <X className="h-3.5 w-3.5" />
+                                    <span>Clear Filter</span>
                                 </button>
                             )}
                         </div>
@@ -465,7 +712,7 @@ export default function SalesPurchaseIndex({
 
                     {/* SPREADSHEET CONTAINER WITH EXACT GREEN BANNER HEADER FROM SCREENSHOT */}
                     <div className="bg-slate-900 border border-emerald-900/60 rounded-2xl overflow-hidden shadow-2xl">
-                        
+
                         {/* GREEN BRANDED BANNER HEADER (WINZELLE SALES & PURCHASE) MATCHING SCREENSHOT */}
                         <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white font-black text-center py-3.5 tracking-widest uppercase text-sm sm:text-base border-b border-emerald-500/40 shadow-inner flex items-center justify-center space-x-2">
                             <span>WINZELLE SALES & PURCHASE</span>
@@ -503,11 +750,10 @@ export default function SalesPurchaseIndex({
                                         </tr>
                                     ) : (
                                         purchases.map((item, idx) => (
-                                            <tr 
-                                                key={item.id} 
-                                                className={`hover:bg-slate-900/90 transition-colors ${
-                                                    idx % 2 === 0 ? 'bg-slate-950' : 'bg-slate-900/40'
-                                                }`}
+                                            <tr
+                                                key={item.id}
+                                                className={`hover:bg-slate-900/90 transition-colors ${idx % 2 === 0 ? 'bg-slate-950' : 'bg-slate-900/40'
+                                                    }`}
                                             >
                                                 <td className="py-2.5 px-3 font-sans text-slate-300 border-r border-slate-800 whitespace-nowrap">
                                                     {formatDateDisplay(item.date)}
@@ -577,7 +823,7 @@ export default function SalesPurchaseIndex({
                                 <Plus className="h-5 w-5 text-emerald-400" />
                                 <span>{editingPurchase ? 'Edit Purchase Entry' : 'Record New Purchase'}</span>
                             </h3>
-                            <button 
+                            <button
                                 onClick={() => setIsAddModalOpen(false)}
                                 className="text-slate-400 hover:text-white p-1 rounded-lg"
                             >
@@ -586,7 +832,7 @@ export default function SalesPurchaseIndex({
                         </div>
 
                         <form onSubmit={handleSubmitPurchase} className="space-y-4">
-                            
+
                             {/* Date & Provider */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -741,6 +987,351 @@ export default function SalesPurchaseIndex({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* DATE FILTER MODAL CALENDAR (Single Date, Per Month, Date Range) */}
+            {isDateModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div className="flex items-center space-x-2.5">
+                                <div className="p-2 bg-emerald-950 border border-emerald-500/40 rounded-xl text-emerald-400">
+                                    <Calendar className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Filter Purchase Transactions</h3>
+                                    <p className="text-xs text-slate-400">Filter by single date, entire month, or custom date range</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsDateModalOpen(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Segmented Filter Mode Tabs */}
+                        <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800 mb-4 text-xs font-semibold">
+                            <button
+                                type="button"
+                                onClick={() => setFilterTab('single')}
+                                className={`py-2 rounded-lg transition text-center flex items-center justify-center space-x-1.5 ${filterTab === 'single'
+                                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                                    }`}
+                            >
+                                <span>📅 Single Date</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterTab('month')}
+                                className={`py-2 rounded-lg transition text-center flex items-center justify-center space-x-1.5 ${filterTab === 'month'
+                                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                                    }`}
+                            >
+                                <span>🗓️ Per Month</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterTab('range')}
+                                className={`py-2 rounded-lg transition text-center flex items-center justify-center space-x-1.5 ${filterTab === 'range'
+                                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                                    }`}
+                            >
+                                <span>↔️ Date Range</span>
+                            </button>
+                        </div>
+
+                        {/* MODE 1: SINGLE DATE / MODE 3: DATE RANGE CALENDAR VIEW */}
+                        {(filterTab === 'single' || filterTab === 'range') && (
+                            <div>
+                                {/* Range Info Banner in Range Mode */}
+                                {filterTab === 'range' && (
+                                    <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl mb-4 text-xs space-y-2">
+                                        <div className="flex items-center justify-between text-slate-300">
+                                            <span className="font-semibold">Selected Range:</span>
+                                            <span className="font-mono text-emerald-400 font-bold">
+                                                {tempStartDate ? formatDateDisplay(tempStartDate) : 'Select Start'}
+                                                {' → '}
+                                                {tempEndDate ? formatDateDisplay(tempEndDate) : 'Select End'}
+                                            </span>
+                                        </div>
+
+                                        {/* Direct Day Range Inputs (ex. Day 4 to Day 27) */}
+                                        <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                                            <span className="text-[11px] text-slate-400 whitespace-nowrap">Day Range:</span>
+                                            <div className="flex items-center space-x-1">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="31"
+                                                    value={rangeStartDay}
+                                                    onChange={(e) => setRangeStartDay(e.target.value)}
+                                                    className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-xs text-white font-mono"
+                                                    placeholder="4"
+                                                />
+                                                <span className="text-slate-500">to</span>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="31"
+                                                    value={rangeEndDay}
+                                                    onChange={(e) => setRangeEndDay(e.target.value)}
+                                                    className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-xs text-white font-mono"
+                                                    placeholder="27"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyQuickDayNumberRange(parseInt(rangeStartDay) || 4, parseInt(rangeEndDay) || 27)}
+                                                className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 rounded text-xs font-semibold ml-auto"
+                                            >
+                                                Apply ({rangeStartDay}–{rangeEndDay})
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Month & Year Navigation Header */}
+                                <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3 mb-3">
+                                    <button
+                                        type="button"
+                                        onClick={prevMonth}
+                                        className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                                        title="Previous Month"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </button>
+
+                                    <div className="text-center">
+                                        <span className="text-sm font-bold text-white tracking-wide">
+                                            {MONTH_NAMES[calendarMonth]} {calendarYear}
+                                        </span>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={nextMonth}
+                                        className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                                        title="Next Month"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                {/* Calendar Days of Week Header */}
+                                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 uppercase mb-2">
+                                    <div>Sun</div>
+                                    <div>Mon</div>
+                                    <div>Tue</div>
+                                    <div>Wed</div>
+                                    <div>Thu</div>
+                                    <div>Fri</div>
+                                    <div>Sat</div>
+                                </div>
+
+                                {/* Days Grid */}
+                                <div className="grid grid-cols-7 gap-1 mb-4">
+                                    {getDaysInMonth(calendarYear, calendarMonth).map((item, idx) => {
+                                        if (!item.isCurrentMonth) {
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className="h-9 flex items-center justify-center text-xs text-slate-700 select-none"
+                                                >
+                                                    {item.day}
+                                                </div>
+                                            );
+                                        }
+
+                                        const hasData = availableDates.includes(item.dateStr);
+                                        const isToday = item.dateStr === new Date().toISOString().split('T')[0];
+
+                                        if (filterTab === 'single') {
+                                            const isSelected = tempSingleDate === item.dateStr;
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => handleDayClickInCalendar(item.dateStr)}
+                                                    className={`h-9 relative flex flex-col items-center justify-center rounded-xl text-xs font-semibold transition-all ${isSelected
+                                                            ? 'bg-emerald-600 text-white font-bold shadow-md scale-105 ring-2 ring-emerald-400'
+                                                            : hasData
+                                                                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-900 font-bold'
+                                                                : 'text-slate-300 hover:bg-slate-800'
+                                                        } ${isToday && !isSelected ? 'ring-1 ring-slate-500' : ''}`}
+                                                >
+                                                    <span>{item.day}</span>
+                                                    {hasData && (
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />
+                                                    )}
+                                                </button>
+                                            );
+                                        } else {
+                                            // RANGE MODE STYLING
+                                            const isStart = tempStartDate === item.dateStr;
+                                            const isEnd = tempEndDate === item.dateStr;
+                                            const isInRange = tempStartDate && tempEndDate && item.dateStr >= tempStartDate && item.dateStr <= tempEndDate;
+
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => handleDayClickInCalendar(item.dateStr)}
+                                                    className={`h-9 relative flex flex-col items-center justify-center text-xs font-semibold transition-all ${isStart || isEnd
+                                                            ? 'bg-emerald-600 text-white font-bold shadow-md ring-2 ring-emerald-400 rounded-xl'
+                                                            : isInRange
+                                                                ? 'bg-emerald-900/60 text-emerald-200 border-y border-emerald-600/40'
+                                                                : hasData
+                                                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-900 rounded-xl font-bold'
+                                                                    : 'text-slate-300 hover:bg-slate-800 rounded-xl'
+                                                        }`}
+                                                >
+                                                    <span>{item.day}</span>
+                                                    {hasData && (
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${isStart || isEnd ? 'bg-white' : 'bg-emerald-400'}`} />
+                                                    )}
+                                                </button>
+                                            );
+                                        }
+                                    })}
+                                </div>
+
+                                {/* Range Presets / Quick Chips */}
+                                {filterTab === 'range' && (
+                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => applyQuickDayNumberRange(4, 27)}
+                                            className="px-2.5 py-1 rounded-lg text-xs bg-slate-950 text-emerald-400 border border-emerald-800/80 hover:bg-emerald-950 font-mono font-semibold"
+                                        >
+                                            Day 4 – 27
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => applyQuickDayNumberRange(1, 15)}
+                                            className="px-2.5 py-1 rounded-lg text-xs bg-slate-950 text-slate-300 border border-slate-800 hover:bg-slate-800 font-mono"
+                                        >
+                                            Days 1 – 15
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => applyQuickDayNumberRange(16, 31)}
+                                            className="px-2.5 py-1 rounded-lg text-xs bg-slate-950 text-slate-300 border border-slate-800 hover:bg-slate-800 font-mono"
+                                        >
+                                            Days 16 – 31
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => applyQuickDayNumberRange(1, 31)}
+                                            className="px-2.5 py-1 rounded-lg text-xs bg-slate-950 text-slate-300 border border-slate-800 hover:bg-slate-800 font-mono"
+                                        >
+                                            Entire Month
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* MODE 2: PER MONTH FILTER VIEW */}
+                        {filterTab === 'month' && (
+                            <div className="space-y-4">
+                                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                                    <label className="block text-xs font-semibold text-slate-300 mb-2">Select Year</label>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCalendarYear(y => y - 1)}
+                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg"
+                                        >
+                                            &larr; {calendarYear - 1}
+                                        </button>
+                                        <div className="flex-1 text-center font-bold text-lg text-emerald-400">
+                                            {calendarYear}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCalendarYear(y => y + 1)}
+                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg"
+                                        >
+                                            {calendarYear + 1} &rarr;
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-300 mb-2">Select Month of {calendarYear}</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {MONTH_NAMES.map((mName, idx) => {
+                                            const mStr = `${calendarYear}-${String(idx + 1).padStart(2, '0')}`;
+                                            const isSelected = tempMonth === mStr || (tempMonth === '' && calendarMonth === idx);
+
+                                            // Check if any transaction exists in this month
+                                            const hasMonthData = availableDates.some(d => d.startsWith(mStr));
+
+                                            return (
+                                                <button
+                                                    key={mName}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCalendarMonth(idx);
+                                                        setTempMonth(mStr);
+                                                    }}
+                                                    className={`py-3 px-2 rounded-xl text-xs font-semibold transition border flex flex-col items-center justify-center space-y-1 ${tempMonth === mStr
+                                                            ? 'bg-emerald-600 text-white font-bold border-emerald-400 shadow-md shadow-emerald-950 ring-2 ring-emerald-400'
+                                                            : hasMonthData
+                                                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/60 hover:bg-emerald-900 font-bold'
+                                                                : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
+                                                        }`}
+                                                >
+                                                    <span>{mName}</span>
+                                                    {hasMonthData && (
+                                                        <span className="text-[10px] font-normal text-emerald-400">● Data</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Modal Footer Actions */}
+                        <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800 gap-2">
+                            <button
+                                type="button"
+                                onClick={handleClearAllDateFilters}
+                                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                            >
+                                Clear All Filters
+                            </button>
+
+                            <div className="flex items-center space-x-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDateModalOpen(false)}
+                                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleApplyModalFilter}
+                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-950 transition flex items-center space-x-1.5"
+                                >
+                                    <Check className="h-4 w-4" />
+                                    <span>Apply Filter</span>
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             )}

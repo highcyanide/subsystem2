@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { 
-    Boxes, 
-    Truck, 
-    PackagePlus, 
-    TrendingUp, 
+import {
+    Boxes,
+    Truck,
+    PackagePlus,
+    TrendingUp,
     Store,
     Layers,
     CheckCircle2,
@@ -60,7 +60,7 @@ export default function MainLayout({ children, title }: Props) {
             <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-emerald-900/40 shadow-xl">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
-                        
+
                         {/* Logo & Title */}
                         <div className="flex items-center space-x-3">
                             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 flex items-center justify-center shadow-lg shadow-emerald-900/30 border border-emerald-400/30">
@@ -87,11 +87,10 @@ export default function MainLayout({ children, title }: Props) {
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                                            item.active
+                                        className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${item.active
                                                 ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-900/20'
                                                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                                        }`}
+                                            }`}
                                     >
                                         <Icon className={`h-4 w-4 ${item.active ? 'text-emerald-400' : 'text-slate-400'}`} />
                                         <span className="whitespace-nowrap">{item.name.replace('Subsystem ', 'S')}</span>
@@ -116,11 +115,10 @@ export default function MainLayout({ children, title }: Props) {
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap shrink-0 ${
-                                    item.active
+                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap shrink-0 ${item.active
                                         ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-500/40'
                                         : 'text-slate-400 hover:text-slate-200 bg-slate-800/40'
-                                }`}
+                                    }`}
                             >
                                 <Icon className="h-3.5 w-3.5" />
                                 <span>{item.name.split(':')[1] || item.name}</span>

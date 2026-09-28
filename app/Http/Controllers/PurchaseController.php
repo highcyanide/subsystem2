@@ -16,6 +16,9 @@ class PurchaseController extends Controller
         $distributorId = $request->query('distributor_id');
         $search = $request->query('search', '');
         $dateFilter = $request->query('date', '');
+        $startDate = $request->query('start_date', '');
+        $endDate = $request->query('end_date', '');
+        $monthFilter = $request->query('month', '');
 
         $distributorsQuery = Distributor::withCount('products');
         if (!empty($search)) {
@@ -54,8 +57,24 @@ class PurchaseController extends Controller
                 $purchasesQuery = Purchase::with(['distributor', 'product'])
                     ->where('distributor_id', $selectedDistributor->id);
 
-                if (!empty($dateFilter)) {
-                    $purchasesQuery->whereDate('date', $dateFilter);
+                // Date Filtering Logic (Single Date, Month, or Date Range)
+                if (!empty($startDate) && !empty($endDate)) {
+                    $purchasesQuery->whereBetween('date', [$startDate, $endDate]);
+                } elseif (!empty($monthFilter)) {
+                    $parts = explode('-', $monthFilter);
+                    if (count($parts) === 2) {
+                        $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
+                    }
+                } elseif (!empty($dateFilter)) {
+                    if (str_contains($dateFilter, '..')) {
+                        $range = explode('..', $dateFilter);
+                        $purchasesQuery->whereBetween('date', [$range[0], $range[1]]);
+                    } elseif (strlen($dateFilter) === 7) {
+                        $parts = explode('-', $dateFilter);
+                        $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
+                    } else {
+                        $purchasesQuery->whereDate('date', $dateFilter);
+                    }
                 }
 
                 $purchases = $purchasesQuery->orderBy('date', 'desc')->orderBy('id', 'desc')->get();
@@ -86,6 +105,9 @@ class PurchaseController extends Controller
             'filters' => [
                 'search' => $search,
                 'date' => $dateFilter,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'month' => $monthFilter,
             ],
         ]);
     }
