@@ -13,7 +13,8 @@ class PurchaseController extends Controller
 {
     public function index(Request $request)
     {
-        $distributorId = $request->query('distributor_id');
+        $distributorParam = $request->query('distributor_id');
+        $distributorIdsParam = $request->query('distributor_ids');
         $search = $request->query('search', '');
         $dateFilter = $request->query('date', '');
         $startDate = $request->query('start_date', '');
@@ -38,7 +39,38 @@ class PurchaseController extends Controller
         $favIds = $favorites->pluck('id')->toArray();
         $others = $allDistributors->whereNotIn('id', $favIds)->values();
 
+        // Determine selected distributor IDs
+        $selectedDistributorIds = [];
+        $isAllDistributors = false;
+
+        if ($distributorParam === 'all') {
+            $isAllDistributors = true;
+            $selectedDistributorIds = $allDistributors->pluck('id')->toArray();
+        } elseif (!empty($distributorIdsParam)) {
+            if (is_array($distributorIdsParam)) {
+                $selectedDistributorIds = array_values(array_map('intval', $distributorIdsParam));
+            } else {
+                $selectedDistributorIds = array_values(array_map('intval', explode(',', $distributorIdsParam)));
+            }
+        } elseif (!empty($distributorParam)) {
+            if (str_contains($distributorParam, ',')) {
+                $selectedDistributorIds = array_values(array_map('intval', explode(',', $distributorParam)));
+            } else {
+                $selectedDistributorIds = [(int) $distributorParam];
+            }
+        }
+
+        if (count($selectedDistributorIds) > 0 && count($selectedDistributorIds) === $allDistributors->count() && $allDistributors->count() > 0) {
+            $isAllDistributors = true;
+        }
+
         $selectedDistributor = null;
+        if (count($selectedDistributorIds) === 1 && !$isAllDistributors) {
+            $selectedDistributor = Distributor::find($selectedDistributorIds[0]);
+        }
+
+        $selectedDistributors = Distributor::whereIn('id', $selectedDistributorIds)->get();
+
         $purchases = collect([]);
         $products = collect([]);
         $summary = [
@@ -49,43 +81,42 @@ class PurchaseController extends Controller
             'total_items' => 0,
         ];
 
-        if ($distributorId) {
-            $selectedDistributor = Distributor::find($distributorId);
-            if ($selectedDistributor) {
-                $products = Product::where('distributor_id', $selectedDistributor->id)->orderBy('name')->get();
+        if (!empty($selectedDistributorIds)) {
+            $products = Product::whereIn('distributor_id', $selectedDistributorIds)->orderBy('name')->get();
 
-                $purchasesQuery = Purchase::with(['distributor', 'product'])
-                    ->where('distributor_id', $selectedDistributor->id);
+            $purchasesQuery = Purchase::with(['distributor', 'product'])
+                ->whereIn('distributor_id', $selectedDistributorIds);
 
-                // Date Filtering Logic (Single Date, Month, or Date Range)
-                if (!empty($startDate) && !empty($endDate)) {
-                    $purchasesQuery->whereBetween('date', [$startDate, $endDate]);
-                } elseif (!empty($monthFilter)) {
-                    $parts = explode('-', $monthFilter);
-                    if (count($parts) === 2) {
-                        $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
-                    }
-                } elseif (!empty($dateFilter)) {
-                    if (str_contains($dateFilter, '..')) {
-                        $range = explode('..', $dateFilter);
-                        $purchasesQuery->whereBetween('date', [$range[0], $range[1]]);
-                    } elseif (strlen($dateFilter) === 7) {
-                        $parts = explode('-', $dateFilter);
-                        $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
-                    } else {
-                        $purchasesQuery->whereDate('date', $dateFilter);
-                    }
+            // Date Filtering Logic (Single Date, Month, or Date Range)
+            if (!empty($startDate) && !empty($endDate)) {
+                $purchasesQuery->whereBetween('date', [$startDate, $endDate]);
+            } elseif (!empty($monthFilter)) {
+                $parts = explode('-', $monthFilter);
+                if (count($parts) === 2) {
+                    $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
                 }
-
-                $purchases = $purchasesQuery->orderBy('date', 'desc')->orderBy('id', 'desc')->get();
-
-                $summary['total_purchase'] = $purchases->sum('total_purchase');
-                $summary['gross_amount'] = $purchases->sum('gross_amount');
-                $summary['vat_adjusted_amount'] = $purchases->sum('vat_adjusted_amount');
-                $summary['net_profit'] = $purchases->sum('net_profit');
-                $summary['total_items'] = $purchases->sum('quantity');
+            } elseif (!empty($dateFilter)) {
+                if (str_contains($dateFilter, '..')) {
+                    $range = explode('..', $dateFilter);
+                    $purchasesQuery->whereBetween('date', [$range[0], $range[1]]);
+                } elseif (strlen($dateFilter) === 7) {
+                    $parts = explode('-', $dateFilter);
+                    $purchasesQuery->whereYear('date', $parts[0])->whereMonth('date', $parts[1]);
+                } else {
+                    $purchasesQuery->whereDate('date', $dateFilter);
+                }
             }
+
+            $purchases = $purchasesQuery->orderBy('date', 'desc')->orderBy('id', 'desc')->get();
+
+            $summary['total_purchase'] = $purchases->sum('total_purchase');
+            $summary['gross_amount'] = $purchases->sum('gross_amount');
+            $summary['vat_adjusted_amount'] = $purchases->sum('vat_adjusted_amount');
+            $summary['net_profit'] = $purchases->sum('net_profit');
+            $summary['total_items'] = $purchases->sum('quantity');
         }
+
+        $allProducts = Product::with('distributor')->orderBy('name')->get();
 
         // Available dates for filter dropdown
         $availableDates = Purchase::select('date')
@@ -98,7 +129,11 @@ class PurchaseController extends Controller
             'others' => $others,
             'allDistributors' => $allDistributors,
             'selectedDistributor' => $selectedDistributor,
+            'selectedDistributorIds' => $selectedDistributorIds,
+            'selectedDistributors' => $selectedDistributors,
+            'isAllDistributors' => $isAllDistributors,
             'products' => $products,
+            'allProducts' => $allProducts,
             'purchases' => $purchases,
             'summary' => $summary,
             'availableDates' => $availableDates,
@@ -108,6 +143,8 @@ class PurchaseController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'month' => $monthFilter,
+                'distributor_id' => $distributorParam,
+                'distributor_ids' => $selectedDistributorIds,
             ],
         ]);
     }

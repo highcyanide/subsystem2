@@ -19,7 +19,10 @@ import {
     Building2,
     CheckCircle2,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    ChevronDown,
+    CheckSquare,
+    Square
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -83,6 +86,7 @@ interface Product {
     purchase_price: number;
     default_discount: number;
     default_dealing_price: number;
+    distributor?: Distributor;
 }
 
 interface Purchase {
@@ -116,7 +120,11 @@ interface Props {
     others: Distributor[];
     allDistributors: Distributor[];
     selectedDistributor: Distributor | null;
+    selectedDistributorIds?: number[];
+    selectedDistributors?: Distributor[];
+    isAllDistributors?: boolean;
     products: Product[];
+    allProducts?: Product[];
     purchases: Purchase[];
     summary: Summary;
     availableDates: string[];
@@ -126,6 +134,8 @@ interface Props {
         start_date?: string;
         end_date?: string;
         month?: string;
+        distributor_id?: string;
+        distributor_ids?: number[];
     };
 }
 
@@ -134,7 +144,11 @@ export default function SalesPurchaseIndex({
     others,
     allDistributors,
     selectedDistributor,
+    selectedDistributorIds = [],
+    selectedDistributors = [],
+    isAllDistributors = false,
     products,
+    allProducts = [],
     purchases,
     summary,
     availableDates,
@@ -145,11 +159,16 @@ export default function SalesPurchaseIndex({
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
 
+    // Distributor Multi-Select Filter Modal State
+    const [isDistributorModalOpen, setIsDistributorModalOpen] = useState(false);
+    const [tempDistributorIds, setTempDistributorIds] = useState<number[]>([]);
+    const [distributorModalSearch, setDistributorModalSearch] = useState('');
+
     // Date Filter Modal Calendar state (Supports Single Date, Per Month, Date Range)
     const [isDateModalOpen, setIsDateModalOpen] = useState(false);
     const [filterTab, setFilterTab] = useState<'single' | 'month' | 'range'>('single');
 
-    // Temporary modal selection states
+    // Temporary modal selection states for dates
     const [tempSingleDate, setTempSingleDate] = useState(filters.date || '');
     const [tempMonth, setTempMonth] = useState(filters.month || '');
     const [tempStartDate, setTempStartDate] = useState(filters.start_date || '');
@@ -173,6 +192,79 @@ export default function SalesPurchaseIndex({
     });
 
     const isFilterActive = !!(filters.date || filters.start_date || filters.end_date || filters.month);
+    const hasSelectedDistributors = selectedDistributorIds.length > 0;
+
+    // Open Custom Distributor Selection Modal
+    const openDistributorModal = () => {
+        setTempDistributorIds(selectedDistributorIds.length > 0 ? [...selectedDistributorIds] : allDistributors.map(d => d.id));
+        setDistributorModalSearch('');
+        setIsDistributorModalOpen(true);
+    };
+
+    const toggleDistributorInTemp = (id: number) => {
+        if (tempDistributorIds.includes(id)) {
+            setTempDistributorIds(tempDistributorIds.filter(dId => dId !== id));
+        } else {
+            setTempDistributorIds([...tempDistributorIds, id]);
+        }
+    };
+
+    const selectAllDistributorsInTemp = () => {
+        setTempDistributorIds(allDistributors.map(d => d.id));
+    };
+
+    const clearDistributorSelectionInTemp = () => {
+        setTempDistributorIds([]);
+    };
+
+    const applyDistributorSelection = () => {
+        setIsDistributorModalOpen(false);
+        if (tempDistributorIds.length === 0) {
+            router.get('/sales-purchase');
+        } else if (tempDistributorIds.length === allDistributors.length) {
+            router.get('/sales-purchase', {
+                ...filters,
+                distributor_id: 'all',
+            }, { preserveState: true });
+        } else if (tempDistributorIds.length === 1) {
+            router.get('/sales-purchase', {
+                ...filters,
+                distributor_id: tempDistributorIds[0].toString(),
+            }, { preserveState: true });
+        } else {
+            router.get('/sales-purchase', {
+                ...filters,
+                distributor_id: tempDistributorIds.join(','),
+            }, { preserveState: true });
+        }
+    };
+
+    const removeDistributorChip = (idToRemove: number) => {
+        const nextIds = selectedDistributorIds.filter(id => id !== idToRemove);
+        if (nextIds.length === 0) {
+            router.get('/sales-purchase');
+        } else if (nextIds.length === allDistributors.length) {
+            router.get('/sales-purchase', { ...filters, distributor_id: 'all' });
+        } else {
+            router.get('/sales-purchase', { ...filters, distributor_id: nextIds.join(',') });
+        }
+    };
+
+    const getProviderBannerLabel = () => {
+        if (isAllDistributors) {
+            return `ALL DISTRIBUTORS (${allDistributors.length} Total)`;
+        }
+        if (selectedDistributors.length > 1) {
+            return `${selectedDistributors.map(d => d.name).join(', ')} (${selectedDistributors.length} Selected)`;
+        }
+        if (selectedDistributor) {
+            return selectedDistributor.name;
+        }
+        if (selectedDistributors.length === 1) {
+            return selectedDistributors[0].name;
+        }
+        return 'ALL DISTRIBUTORS';
+    };
 
     const getActiveFilterLabel = () => {
         if (filters.start_date && filters.end_date) {
@@ -249,7 +341,7 @@ export default function SalesPurchaseIndex({
     const handleClearAllDateFilters = () => {
         setSelectedDate('');
         router.get('/sales-purchase', {
-            distributor_id: selectedDistributor?.id,
+            distributor_id: filters.distributor_id,
             search: searchQuery,
             date: '',
             start_date: '',
@@ -263,7 +355,7 @@ export default function SalesPurchaseIndex({
 
         if (filterTab === 'single') {
             router.get('/sales-purchase', {
-                distributor_id: selectedDistributor?.id,
+                distributor_id: filters.distributor_id,
                 search: searchQuery,
                 date: tempSingleDate,
                 start_date: '',
@@ -273,7 +365,7 @@ export default function SalesPurchaseIndex({
         } else if (filterTab === 'month') {
             const mVal = tempMonth || `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
             router.get('/sales-purchase', {
-                distributor_id: selectedDistributor?.id,
+                distributor_id: filters.distributor_id,
                 search: searchQuery,
                 month: mVal,
                 date: '',
@@ -283,7 +375,7 @@ export default function SalesPurchaseIndex({
         } else if (filterTab === 'range') {
             if (tempStartDate && tempEndDate) {
                 router.get('/sales-purchase', {
-                    distributor_id: selectedDistributor?.id,
+                    distributor_id: filters.distributor_id,
                     search: searchQuery,
                     start_date: tempStartDate,
                     end_date: tempEndDate,
@@ -292,7 +384,7 @@ export default function SalesPurchaseIndex({
                 }, { preserveState: true });
             } else if (tempStartDate) {
                 router.get('/sales-purchase', {
-                    distributor_id: selectedDistributor?.id,
+                    distributor_id: filters.distributor_id,
                     search: searchQuery,
                     date: tempStartDate,
                     start_date: '',
@@ -338,28 +430,24 @@ export default function SalesPurchaseIndex({
 
     // Form state for new/edited purchase
     const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+    const [formDistributorId, setFormDistributorId] = useState<number | ''>('');
     const [formProductId, setFormProductId] = useState<number | ''>('');
     const [formQuantity, setFormQuantity] = useState<number>(10);
     const [formPurchasePrice, setFormPurchasePrice] = useState<number>(0);
     const [formDiscount, setFormDiscount] = useState<number>(0);
     const [formVatRate, setFormVatRate] = useState<number>(12);
 
+    // Filter products available for the selected distributor in modal form
+    const poolProducts = allProducts.length > 0 ? allProducts : products;
+    const availableProductsForForm = poolProducts.filter(p => formDistributorId === '' || p.distributor_id === Number(formDistributorId));
+
     // Search distributor handler
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         router.get('/sales-purchase', {
-            distributor_id: selectedDistributor?.id,
+            distributor_id: filters.distributor_id,
             search: searchQuery,
             date: selectedDate
-        }, { preserveState: true });
-    };
-
-    const handleDateFilterChange = (dateVal: string) => {
-        setSelectedDate(dateVal);
-        router.get('/sales-purchase', {
-            distributor_id: selectedDistributor?.id,
-            search: searchQuery,
-            date: dateVal
         }, { preserveState: true });
     };
 
@@ -372,10 +460,23 @@ export default function SalesPurchaseIndex({
         router.post(`/distributors/${distId}/toggle-favorite`, {}, { preserveScroll: true });
     };
 
-    // When selecting product in modal, auto fill purchase price & discount
+    const handleFormDistributorChange = (distId: number) => {
+        setFormDistributorId(distId);
+        const distProds = poolProducts.filter(p => p.distributor_id === distId);
+        if (distProds.length > 0) {
+            setFormProductId(distProds[0].id);
+            setFormPurchasePrice(Number(distProds[0].purchase_price));
+            setFormDiscount(Number(distProds[0].default_discount || 0));
+        } else {
+            setFormProductId('');
+            setFormPurchasePrice(0);
+            setFormDiscount(0);
+        }
+    };
+
     const handleProductChange = (prodId: number) => {
         setFormProductId(prodId);
-        const prod = products.find(p => p.id === prodId);
+        const prod = poolProducts.find(p => p.id === prodId);
         if (prod) {
             setFormPurchasePrice(Number(prod.purchase_price));
             setFormDiscount(Number(prod.default_discount || 0));
@@ -383,15 +484,28 @@ export default function SalesPurchaseIndex({
     };
 
     const openAddModal = () => {
-        if (products.length > 0) {
-            setFormProductId(products[0].id);
-            setFormPurchasePrice(Number(products[0].purchase_price));
-            setFormDiscount(Number(products[0].default_discount || 0));
+        let initDistId: number | '' = '';
+        if (selectedDistributor) {
+            initDistId = selectedDistributor.id;
+        } else if (selectedDistributors.length > 0) {
+            initDistId = selectedDistributors[0].id;
+        } else if (allDistributors.length > 0) {
+            initDistId = allDistributors[0].id;
+        }
+
+        setFormDistributorId(initDistId);
+        const distProds = poolProducts.filter(p => initDistId === '' || p.distributor_id === Number(initDistId));
+
+        if (distProds.length > 0) {
+            setFormProductId(distProds[0].id);
+            setFormPurchasePrice(Number(distProds[0].purchase_price));
+            setFormDiscount(Number(distProds[0].default_discount || 0));
         } else {
             setFormProductId('');
             setFormPurchasePrice(0);
             setFormDiscount(0);
         }
+
         setFormDate(new Date().toISOString().split('T')[0]);
         setFormQuantity(10);
         setFormVatRate(12);
@@ -402,6 +516,7 @@ export default function SalesPurchaseIndex({
     const openEditModal = (purchase: Purchase) => {
         setEditingPurchase(purchase);
         setFormDate(purchase.date);
+        setFormDistributorId(purchase.distributor_id);
         setFormProductId(purchase.product_id);
         setFormQuantity(purchase.quantity);
         setFormPurchasePrice(Number(purchase.purchase_price));
@@ -412,11 +527,11 @@ export default function SalesPurchaseIndex({
 
     const handleSubmitPurchase = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedDistributor || !formProductId) return;
+        if (!formDistributorId || !formProductId) return;
 
         const payload = {
             date: formDate,
-            distributor_id: selectedDistributor.id,
+            distributor_id: formDistributorId,
             product_id: formProductId,
             quantity: formQuantity,
             purchase_price: formPurchasePrice,
@@ -465,7 +580,7 @@ export default function SalesPurchaseIndex({
         if (!dateStr) return '';
         const parts = dateStr.split('-');
         if (parts.length === 3) {
-            return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY matching spreadsheet image
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
         return dateStr;
     };
@@ -487,27 +602,87 @@ export default function SalesPurchaseIndex({
                     </h1>
                 </div>
 
-                {selectedDistributor && (
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* CUSTOMIZE DISTRIBUTORS SELECTOR BUTTON */}
                     <button
-                        onClick={() => router.get('/sales-purchase')}
-                        className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-sm font-medium transition shadow-sm w-fit"
+                        onClick={openDistributorModal}
+                        className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 rounded-lg border border-emerald-500/50 text-xs font-bold transition shadow-sm"
                     >
-                        <ArrowLeft className="h-4 w-4" />
-                        <span>Back to Distributor Cards</span>
+                        <Building2 className="h-4 w-4 text-emerald-400" />
+                        <span>
+                            {isAllDistributors
+                                ? `ALL Distributors (${allDistributors.length})`
+                                : selectedDistributors.length > 1
+                                    ? `${selectedDistributors.length} Distributors Selected`
+                                    : selectedDistributor
+                                        ? selectedDistributor.name
+                                        : 'Select Distributors'}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 text-emerald-400" />
                     </button>
-                )}
+
+                    {hasSelectedDistributors && (
+                        <button
+                            onClick={() => router.get('/sales-purchase')}
+                            className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-xs font-medium transition shadow-sm"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                            <span>Back to Cards</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* IF NO DISTRIBUTOR SELECTED: SHOW DISTRIBUTOR CARDS VIEW */}
-            {!selectedDistributor ? (
+            {!hasSelectedDistributors ? (
                 <div className="space-y-8 animate-fade-in">
+
+                    {/* HERO CARD: ALL DISTRIBUTORS OPTION */}
+                    <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border-2 border-emerald-500/50 hover:border-emerald-400 p-6 rounded-2xl shadow-xl transition-all duration-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group">
+                        <div className="flex items-center space-x-4">
+                            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform shrink-0">
+                                <Layers className="h-7 w-7" />
+                            </div>
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-xl font-black text-white group-hover:text-emerald-300 transition-colors">
+                                        ALL DISTRIBUTORS
+                                    </h2>
+                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                        {allDistributors.length} Distributors Total
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-300 mt-1">
+                                    Display sales & purchases for <strong>ALL Distributors</strong> combined, or customize who to display (e.g. choose Pepsi and Coca-Cola Bottlers).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0">
+                            <button
+                                onClick={() => router.get('/sales-purchase', { distributor_id: 'all' })}
+                                className="flex-1 md:flex-none px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center space-x-2 border border-emerald-400/40"
+                            >
+                                <span>View All Transactions</span>
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={openDistributorModal}
+                                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition flex items-center justify-center space-x-1.5"
+                            >
+                                <Filter className="h-4 w-4 text-emerald-400" />
+                                <span>Customize (Select)</span>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Search & Intro Header */}
                     <div className="bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl backdrop-blur-sm">
                         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                             <div>
-                                <h2 className="text-lg font-semibold text-white">Select a Distributor to Manage</h2>
+                                <h2 className="text-lg font-semibold text-white">Select a Distributor Card</h2>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    Browse favorite and categorized distributors to view transactions, add purchases, and sync live inventory.
+                                    Click any card below to view its specific transactions, or use the <strong>"ALL Distributors"</strong> button above to customize your view.
                                 </p>
                             </div>
 
@@ -525,7 +700,7 @@ export default function SalesPurchaseIndex({
                         </div>
                     </div>
 
-                    {/* FAVORITES DISTRIBUTORS SECTION (At least 4 Cards) */}
+                    {/* FAVORITES DISTRIBUTORS SECTION */}
                     <div>
                         <div className="flex items-center space-x-2 mb-4">
                             <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
@@ -578,7 +753,7 @@ export default function SalesPurchaseIndex({
                         </div>
                     </div>
 
-                    {/* THE REST OF THE DISTRIBUTORS SECTION (Alphabetically Arranged) */}
+                    {/* THE REST OF THE DISTRIBUTORS SECTION */}
                     <div>
                         <div className="flex items-center space-x-2 mb-4">
                             <Building2 className="h-5 w-5 text-slate-400" />
@@ -635,8 +810,60 @@ export default function SalesPurchaseIndex({
                     </div>
                 </div>
             ) : (
-                /* CHOSEN DISTRIBUTOR SALES & PURCHASE VIEW (Excel Table Header style as in Screenshot) */
+                /* SELECTED DISTRIBUTORS SALES & PURCHASE VIEW */
                 <div className="space-y-6 animate-fade-in">
+
+                    {/* Active Selected Distributor Chips Bar */}
+                    <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <Filter className="h-3.5 w-3.5 text-emerald-400" />
+                                <span>Distributor Filter:</span>
+                            </span>
+
+                            {isAllDistributors ? (
+                                <span className="inline-flex items-center space-x-1 px-3 py-1 bg-emerald-950 text-emerald-300 border border-emerald-600/60 rounded-full text-xs font-bold">
+                                    <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span>ALL Distributors ({allDistributors.length})</span>
+                                </span>
+                            ) : (
+                                selectedDistributors.map(d => (
+                                    <span
+                                        key={d.id}
+                                        className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-950/80 text-emerald-200 border border-emerald-700/60 rounded-full text-xs font-semibold"
+                                    >
+                                        <span>{d.name}</span>
+                                        {selectedDistributors.length > 1 && (
+                                            <button
+                                                onClick={() => removeDistributorChip(d.id)}
+                                                className="hover:text-rose-400 transition"
+                                                title={`Remove ${d.name}`}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        )}
+                                    </span>
+                                ))
+                            )}
+
+                            <button
+                                onClick={openDistributorModal}
+                                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline px-2 py-1 flex items-center space-x-1"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                <span>Customize / Select More</span>
+                            </button>
+                        </div>
+
+                        {!isAllDistributors && (
+                            <button
+                                onClick={() => router.get('/sales-purchase', { ...filters, distributor_id: 'all' })}
+                                className="text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition"
+                            >
+                                Switch to ALL Distributors
+                            </button>
+                        )}
+                    </div>
 
                     {/* Top Summary Stats Bar */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -710,14 +937,14 @@ export default function SalesPurchaseIndex({
                         </div>
                     </div>
 
-                    {/* SPREADSHEET CONTAINER WITH EXACT GREEN BANNER HEADER FROM SCREENSHOT */}
+                    {/* SPREADSHEET CONTAINER WITH GREEN BANNER HEADER */}
                     <div className="bg-slate-900 border border-emerald-900/60 rounded-2xl overflow-hidden shadow-2xl">
 
-                        {/* GREEN BRANDED BANNER HEADER (WINZELLE SALES & PURCHASE) MATCHING SCREENSHOT */}
-                        <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white font-black text-center py-3.5 tracking-widest uppercase text-sm sm:text-base border-b border-emerald-500/40 shadow-inner flex items-center justify-center space-x-2">
+                        {/* GREEN BRANDED BANNER HEADER (WINZELLE SALES & PURCHASE) */}
+                        <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white font-black text-center py-3.5 tracking-widest uppercase text-sm sm:text-base border-b border-emerald-500/40 shadow-inner flex flex-wrap items-center justify-center gap-2">
                             <span>WINZELLE SALES & PURCHASE</span>
-                            <span className="text-xs bg-emerald-900/80 px-2.5 py-0.5 rounded-full border border-emerald-400/40 font-normal">
-                                Provider: {selectedDistributor.name}
+                            <span className="text-xs bg-emerald-900/80 px-3 py-0.5 rounded-full border border-emerald-400/40 font-normal">
+                                Provider: {getProviderBannerLabel()}
                             </span>
                         </div>
 
@@ -725,7 +952,7 @@ export default function SalesPurchaseIndex({
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse font-sans text-xs">
                                 <thead>
-                                    {/* Table Header Styled like the Spreadsheet image */}
+                                    {/* Table Header */}
                                     <tr className="bg-emerald-800 text-emerald-50 uppercase tracking-wider font-bold border-b border-emerald-600 text-[11px]">
                                         <th className="py-3 px-3 border-r border-emerald-700/60 whitespace-nowrap">DATE</th>
                                         <th className="py-3 px-3 border-r border-emerald-700/60 whitespace-nowrap">PROVIDER</th>
@@ -745,7 +972,7 @@ export default function SalesPurchaseIndex({
                                     {purchases.length === 0 ? (
                                         <tr>
                                             <td colSpan={12} className="py-12 text-center text-slate-500 font-sans">
-                                                No purchase records found for this distributor. Click <strong className="text-emerald-400">"Add Purchase Transaction"</strong> above to record a purchase.
+                                                No purchase records found for the selected distributor filter. Click <strong className="text-emerald-400">"Add Purchase Transaction"</strong> above to record a purchase.
                                             </td>
                                         </tr>
                                     ) : (
@@ -759,7 +986,7 @@ export default function SalesPurchaseIndex({
                                                     {formatDateDisplay(item.date)}
                                                 </td>
                                                 <td className="py-2.5 px-3 font-sans font-bold text-white border-r border-slate-800 whitespace-nowrap">
-                                                    {selectedDistributor.name}
+                                                    {item.distributor?.name || selectedDistributor?.name || 'N/A'}
                                                 </td>
                                                 <td className="py-2.5 px-3 text-right font-bold text-amber-300 border-r border-slate-800">
                                                     {item.quantity}
@@ -814,8 +1041,112 @@ export default function SalesPurchaseIndex({
                 </div>
             )}
 
+            {/* CUSTOMIZE DISTRIBUTORS SELECTION MODAL */}
+            {isDistributorModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div className="flex items-center space-x-2">
+                                <Building2 className="h-5 w-5 text-emerald-400" />
+                                <h3 className="text-base font-bold text-white">Customize Distributors Display</h3>
+                            </div>
+                            <button
+                                onClick={() => setIsDistributorModalOpen(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-slate-400 mb-4">
+                            Select specific distributors to display their sales & purchase transactions together (for example: choose Pepsi and Coca-Cola Bottlers, or select All).
+                        </p>
+
+                        {/* Quick Actions */}
+                        <div className="flex items-center justify-between bg-slate-950 p-2 rounded-xl border border-slate-800 mb-3 text-xs font-semibold">
+                            <button
+                                type="button"
+                                onClick={selectAllDistributorsInTemp}
+                                className="px-3 py-1.5 bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-700 rounded-lg transition"
+                            >
+                                ✓ Select All ({allDistributors.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={clearDistributorSelectionInTemp}
+                                className="px-3 py-1.5 bg-slate-900 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-lg transition"
+                            >
+                                Clear All
+                            </button>
+                        </div>
+
+                        {/* Search filter inside modal */}
+                        <div className="relative mb-3">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                            <input
+                                type="text"
+                                placeholder="Search distributor name..."
+                                value={distributorModalSearch}
+                                onChange={(e) => setDistributorModalSearch(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                            />
+                        </div>
+
+                        {/* Distributor Checkbox List */}
+                        <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 mb-4 border border-slate-800/80 rounded-xl p-2 bg-slate-950/60">
+                            {allDistributors
+                                .filter(d => d.name.toLowerCase().includes(distributorModalSearch.toLowerCase()))
+                                .map((dist) => {
+                                    const isChecked = tempDistributorIds.includes(dist.id);
+                                    return (
+                                        <label
+                                            key={dist.id}
+                                            className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer border transition text-xs font-medium ${isChecked
+                                                    ? 'bg-emerald-950/80 border-emerald-500/60 text-white font-bold'
+                                                    : 'bg-slate-900/50 border-slate-800 text-slate-300 hover:bg-slate-850'
+                                                }`}
+                                        >
+                                            <div className="flex items-center space-x-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => toggleDistributorInTemp(dist.id)}
+                                                    className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                                                />
+                                                <span>{dist.name}</span>
+                                            </div>
+                                            <span className="text-[11px] text-slate-500 font-mono">
+                                                {dist.products_count || 0} products
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                        </div>
+
+                        {/* Modal Footer Actions */}
+                        <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setIsDistributorModalOpen(false)}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={applyDistributorSelection}
+                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center space-x-1.5"
+                            >
+                                <Check className="h-4 w-4" />
+                                <span>Apply ({tempDistributorIds.length} Selected)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ADD / EDIT PURCHASE MODAL */}
-            {isAddModalOpen && selectedDistributor && (
+            {isAddModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                     <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
@@ -833,7 +1164,7 @@ export default function SalesPurchaseIndex({
 
                         <form onSubmit={handleSubmitPurchase} className="space-y-4">
 
-                            {/* Date & Provider */}
+                            {/* Date & Provider Selection */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-300 mb-1">Date of Purchase</label>
@@ -847,21 +1178,36 @@ export default function SalesPurchaseIndex({
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-300 mb-1">Provider (Distributor)</label>
-                                    <input
-                                        type="text"
-                                        disabled
-                                        value={selectedDistributor.name}
-                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 font-bold"
-                                    />
+                                    {selectedDistributor && !isAllDistributors && selectedDistributors.length === 1 ? (
+                                        <input
+                                            type="text"
+                                            disabled
+                                            value={selectedDistributor.name}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 font-bold"
+                                        />
+                                    ) : (
+                                        <select
+                                            required
+                                            value={formDistributorId}
+                                            onChange={(e) => handleFormDistributorChange(Number(e.target.value))}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                                        >
+                                            {allDistributors.map(d => (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Product Selector */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-300 mb-1">Product of Distributor</label>
-                                {products.length === 0 ? (
+                                {availableProductsForForm.length === 0 ? (
                                     <div className="text-xs text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-900">
-                                        No products found for {selectedDistributor.name}. Please add items first under Subsystem 2: Distributor Items!
+                                        No products found for selected distributor. Please add items under Subsystem 2: Distributor Items first!
                                     </div>
                                 ) : (
                                     <select
@@ -870,7 +1216,7 @@ export default function SalesPurchaseIndex({
                                         onChange={(e) => handleProductChange(Number(e.target.value))}
                                         className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                                     >
-                                        {products.map(p => (
+                                        {availableProductsForForm.map(p => (
                                             <option key={p.id} value={p.id}>
                                                 {p.name} (Base Cost: ₱{p.purchase_price})
                                             </option>
@@ -980,7 +1326,7 @@ export default function SalesPurchaseIndex({
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={products.length === 0}
+                                    disabled={availableProductsForForm.length === 0}
                                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md"
                                 >
                                     {editingPurchase ? 'Save Changes' : 'Save & Sync Inventory'}
@@ -1273,7 +1619,6 @@ export default function SalesPurchaseIndex({
                                             const mStr = `${calendarYear}-${String(idx + 1).padStart(2, '0')}`;
                                             const isSelected = tempMonth === mStr || (tempMonth === '' && calendarMonth === idx);
 
-                                            // Check if any transaction exists in this month
                                             const hasMonthData = availableDates.some(d => d.startsWith(mStr));
 
                                             return (
