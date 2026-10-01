@@ -14,6 +14,7 @@ class Distributor extends Model
         'contact_number',
         'email',
         'address',
+        'logo',
         'is_favorite',
     ];
 

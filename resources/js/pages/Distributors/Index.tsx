@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
+import ConfirmModal from '@/Components/ConfirmModal';
 import { 
     Truck, 
     Plus, 
@@ -29,17 +30,38 @@ interface Props {
     distributors: Distributor[];
     favorites: Distributor[];
     others: Distributor[];
+    filters?: { search: string };
 }
 
-export default function DistributorsIndex({ distributors, favorites, others }: Props) {
+export default function DistributorsIndex({ distributors, favorites, others, filters }: Props) {
+    const { auth } = usePage().props as any;
+    const userRole = auth?.user?.role || 'guest';
+    const canManage = userRole === 'admin' || userRole === 'owner';
+    const canDelete = userRole === 'admin';
+
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [distToDelete, setDistToDelete] = useState<{ id: number; name: string } | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingDistributor, setEditingDistributor] = useState<Distributor | null>(null);
+    const [searchQuery, setSearchQuery] = useState(filters?.search || '');
+    const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [name, setName] = useState('');
     const [contactNumber, setContactNumber] = useState('');
     const [email, setEmail] = useState('');
     const [address, setAddress] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
+
+    // Live debounced search
+    const handleSearch = (value: string) => {
+        setSearchQuery(value);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+            router.get('/distributors', { search: value }, { preserveState: true, preserveScroll: true });
+        }, 300);
+    };
 
     const openAddModal = () => {
         setEditingDistributor(null);
@@ -86,10 +108,22 @@ export default function DistributorsIndex({ distributors, favorites, others }: P
         router.post(`/distributors/${distId}/toggle-favorite`, {}, { preserveScroll: true });
     };
 
-    const handleDelete = (distId: number, distName: string) => {
-        if (confirm(`Are you sure you want to delete distributor "${distName}"? This will remove associated products.`)) {
-            router.delete(`/distributors/${distId}`, { preserveScroll: true });
-        }
+    const confirmDelete = (distId: number, distName: string) => {
+        setDistToDelete({ id: distId, name: distName });
+        setDeleteModalOpen(true);
+    };
+
+    const handleExecuteDelete = () => {
+        if (!distToDelete) return;
+        setIsDeleting(true);
+        router.delete(`/distributors/${distToDelete.id}`, {
+            preserveScroll: true,
+            onFinish: () => {
+                setIsDeleting(false);
+                setDeleteModalOpen(false);
+                setDistToDelete(null);
+            }
+        });
     };
 
     return (
@@ -110,13 +144,27 @@ export default function DistributorsIndex({ distributors, favorites, others }: P
                     </h1>
                 </div>
 
-                <button
-                    onClick={openAddModal}
-                    className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/50 transition border border-emerald-400/30"
-                >
-                    <Plus className="h-4 w-4" />
-                    <span>Add New Distributor</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    {/* Live Search */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search distributors..."
+                            value={searchQuery}
+                            onChange={(e) => handleSearch(e.target.value)}
+                            className="w-48 lg:w-64 bg-slate-950 border border-slate-700 rounded-xl pl-3 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                        />
+                    </div>
+                    {canManage && (
+                        <button
+                            onClick={openAddModal}
+                            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/50 transition border border-emerald-400/30"
+                        >
+                            <Plus className="h-4 w-4" />
+                            <span>Add New Distributor</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Distributor Grid */}
@@ -175,20 +223,27 @@ export default function DistributorsIndex({ distributors, favorites, others }: P
                                         {dist.products_count || 0} Products registered
                                     </span>
                                     <div className="flex items-center space-x-1">
-                                        <button
-                                            onClick={() => openEditModal(dist)}
-                                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-                                            title="Edit Distributor"
-                                        >
-                                            <Edit2 className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(dist.id, dist.name)}
-                                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
-                                            title="Delete Distributor"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        {canManage && (
+                                            <button
+                                                onClick={() => openEditModal(dist)}
+                                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                                                title="Edit Distributor"
+                                            >
+                                                <Edit2 className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {canDelete && (
+                                            <button
+                                                onClick={() => confirmDelete(dist.id, dist.name)}
+                                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                                                title="Delete Distributor"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {!canManage && !canDelete && (
+                                            <span className="text-[10px] text-slate-500 italic">View only</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -241,18 +296,27 @@ export default function DistributorsIndex({ distributors, favorites, others }: P
                                             {dist.products_count || 0} Items
                                         </span>
                                         <div className="flex items-center space-x-1">
-                                            <button
-                                                onClick={() => openEditModal(dist)}
-                                                className="p-1 text-slate-400 hover:text-white rounded"
-                                            >
-                                                <Edit2 className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(dist.id, dist.name)}
-                                                className="p-1 text-slate-400 hover:text-rose-400 rounded"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
+                                            {canManage && (
+                                                <button
+                                                    onClick={() => openEditModal(dist)}
+                                                    className="p-1 text-slate-400 hover:text-white rounded"
+                                                    title="Edit Distributor"
+                                                >
+                                                    <Edit2 className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {canDelete && (
+                                                <button
+                                                    onClick={() => confirmDelete(dist.id, dist.name)}
+                                                    className="p-1 text-slate-400 hover:text-rose-400 rounded"
+                                                    title="Delete Distributor"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {!canManage && !canDelete && (
+                                                <span className="text-[10px] text-slate-500 italic">View only</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -356,6 +420,21 @@ export default function DistributorsIndex({ distributors, favorites, others }: P
                     </div>
                 </div>
             )}
+            {/* Custom Styled Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                title="Delete Distributor"
+                message={`Are you sure you want to permanently delete distributor "${distToDelete?.name}"? All products and transactions associated with this distributor will be affected.`}
+                confirmText="Yes, Delete Distributor"
+                isLoading={isDeleting}
+                onConfirm={handleExecuteDelete}
+                onCancel={() => {
+                    if (!isDeleting) {
+                        setDeleteModalOpen(false);
+                        setDistToDelete(null);
+                    }
+                }}
+            />
         </MainLayout>
     );
 }

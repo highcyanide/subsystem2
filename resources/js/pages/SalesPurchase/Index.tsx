@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Head, router, Link } from '@inertiajs/react';
+import { Head, router, Link, usePage } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
+import ConfirmModal from '@/Components/ConfirmModal';
+import { downloadCSV } from '@/utils/exportCsv';
 import {
     Search,
     Star,
@@ -22,7 +24,8 @@ import {
     ChevronRight,
     ChevronDown,
     CheckSquare,
-    Square
+    Square,
+    Download
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -154,6 +157,16 @@ export default function SalesPurchaseIndex({
     availableDates,
     filters
 }: Props) {
+    const { auth, settings } = usePage().props as any;
+    const userRole = auth?.user?.role || 'guest';
+    const canManage = userRole === 'admin' || userRole === 'owner';
+    const canDelete = userRole === 'admin';
+    const defaultVatPercentage = Number(settings?.default_vat_percentage || 12);
+
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [purchaseToDelete, setPurchaseToDelete] = useState<number | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [selectedDate, setSelectedDate] = useState(filters.date || '');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -439,11 +452,29 @@ export default function SalesPurchaseIndex({
 
     // Filter products available for the selected distributor in modal form
     const poolProducts = allProducts.length > 0 ? allProducts : products;
-    const availableProductsForForm = poolProducts.filter(p => formDistributorId === '' || p.distributor_id === Number(formDistributorId));
+    const availableProductsForForm = formDistributorId !== '' 
+        ? poolProducts.filter(p => p.distributor_id === Number(formDistributorId))
+        : [];
+
+    // Live search debounce ref
+    const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+            router.get('/sales-purchase', {
+                distributor_id: filters.distributor_id,
+                search: value,
+                date: selectedDate
+            }, { preserveState: true });
+        }, 300);
+    };
 
     // Search distributor handler
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         router.get('/sales-purchase', {
             distributor_id: filters.distributor_id,
             search: searchQuery,
@@ -460,13 +491,19 @@ export default function SalesPurchaseIndex({
         router.post(`/distributors/${distId}/toggle-favorite`, {}, { preserveScroll: true });
     };
 
-    const handleFormDistributorChange = (distId: number) => {
+    const handleFormDistributorChange = (distId: number | '') => {
         setFormDistributorId(distId);
-        const distProds = poolProducts.filter(p => p.distributor_id === distId);
-        if (distProds.length > 0) {
-            setFormProductId(distProds[0].id);
-            setFormPurchasePrice(Number(distProds[0].purchase_price));
-            setFormDiscount(Number(distProds[0].default_discount || 0));
+        if (distId !== '') {
+            const distProds = poolProducts.filter(p => p.distributor_id === Number(distId));
+            if (distProds.length > 0) {
+                setFormProductId(distProds[0].id);
+                setFormPurchasePrice(Number(distProds[0].purchase_price));
+                setFormDiscount(Number(distProds[0].default_discount || 0));
+            } else {
+                setFormProductId('');
+                setFormPurchasePrice(0);
+                setFormDiscount(0);
+            }
         } else {
             setFormProductId('');
             setFormPurchasePrice(0);
@@ -474,32 +511,41 @@ export default function SalesPurchaseIndex({
         }
     };
 
-    const handleProductChange = (prodId: number) => {
+    const handleProductChange = (prodId: number | '') => {
         setFormProductId(prodId);
-        const prod = poolProducts.find(p => p.id === prodId);
-        if (prod) {
-            setFormPurchasePrice(Number(prod.purchase_price));
-            setFormDiscount(Number(prod.default_discount || 0));
+        if (prodId !== '') {
+            const prod = poolProducts.find(p => p.id === Number(prodId));
+            if (prod) {
+                setFormPurchasePrice(Number(prod.purchase_price));
+                setFormDiscount(Number(prod.default_discount || 0));
+            }
+        } else {
+            setFormPurchasePrice(0);
+            setFormDiscount(0);
         }
     };
 
     const openAddModal = () => {
         let initDistId: number | '' = '';
-        if (selectedDistributor) {
+        if (selectedDistributor && !isAllDistributors) {
             initDistId = selectedDistributor.id;
-        } else if (selectedDistributors.length > 0) {
+        } else if (selectedDistributors.length === 1 && !isAllDistributors) {
             initDistId = selectedDistributors[0].id;
-        } else if (allDistributors.length > 0) {
-            initDistId = allDistributors[0].id;
         }
 
         setFormDistributorId(initDistId);
-        const distProds = poolProducts.filter(p => initDistId === '' || p.distributor_id === Number(initDistId));
 
-        if (distProds.length > 0) {
-            setFormProductId(distProds[0].id);
-            setFormPurchasePrice(Number(distProds[0].purchase_price));
-            setFormDiscount(Number(distProds[0].default_discount || 0));
+        if (initDistId !== '') {
+            const distProds = poolProducts.filter(p => p.distributor_id === Number(initDistId));
+            if (distProds.length > 0) {
+                setFormProductId(distProds[0].id);
+                setFormPurchasePrice(Number(distProds[0].purchase_price));
+                setFormDiscount(Number(distProds[0].default_discount || 0));
+            } else {
+                setFormProductId('');
+                setFormPurchasePrice(0);
+                setFormDiscount(0);
+            }
         } else {
             setFormProductId('');
             setFormPurchasePrice(0);
@@ -508,7 +554,7 @@ export default function SalesPurchaseIndex({
 
         setFormDate(new Date().toISOString().split('T')[0]);
         setFormQuantity(10);
-        setFormVatRate(12);
+        setFormVatRate(defaultVatPercentage);
         setEditingPurchase(null);
         setIsAddModalOpen(true);
     };
@@ -555,10 +601,57 @@ export default function SalesPurchaseIndex({
         }
     };
 
-    const handleDeletePurchase = (id: number) => {
-        if (confirm('Are you sure you want to delete this purchase entry? Stock quantity in Subsystem 1 Inventory will be automatically adjusted.')) {
-            router.delete(`/sales-purchase/${id}`, { preserveScroll: true });
-        }
+    const confirmDeletePurchase = (id: number) => {
+        setPurchaseToDelete(id);
+        setDeleteModalOpen(true);
+    };
+
+    const handleExecuteDelete = () => {
+        if (!purchaseToDelete) return;
+        setIsDeleting(true);
+        router.delete(`/sales-purchase/${purchaseToDelete}`, {
+            preserveScroll: true,
+            onFinish: () => {
+                setIsDeleting(false);
+                setDeleteModalOpen(false);
+                setPurchaseToDelete(null);
+            }
+        });
+    };
+
+    const handleExportCSV = () => {
+        const headers = [
+            'Date',
+            'Provider / Distributor',
+            'Product Name',
+            'Quantity',
+            'Purchase Price (PHP)',
+            'Total Purchase (PHP)',
+            'Dealing Price (PHP)',
+            'Discount (PHP)',
+            'Gross Amount (PHP)',
+            'VAT Percentage',
+            'VAT Adjusted Amount (PHP)',
+            'Net Profit (PHP)'
+        ];
+
+        const rows = purchases.map(item => [
+            item.date,
+            item.distributor?.name || selectedDistributor?.name || 'N/A',
+            item.product?.name || 'Item',
+            item.quantity,
+            item.purchase_price,
+            item.total_purchase,
+            item.dealing_price,
+            item.discount,
+            item.gross_amount,
+            `${item.vat_percentage}%`,
+            item.vat_adjusted_amount,
+            item.net_profit
+        ]);
+
+        const providerLabel = selectedDistributor ? selectedDistributor.name.replace(/\s+/g, '_') : 'All_Distributors';
+        downloadCSV(`winzelle_sales_purchases_${providerLabel}_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
     };
 
     // Live Math calculations for form preview
@@ -691,11 +784,20 @@ export default function SalesPurchaseIndex({
                                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <input
                                     type="text"
-                                    placeholder="Search distributor by name..."
+                                    placeholder="Search distributor or product..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                                    onChange={(e) => handleSearchChange(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-9 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
                                 />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSearchChange('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                )}
                             </form>
                         </div>
                     </div>
@@ -710,47 +812,55 @@ export default function SalesPurchaseIndex({
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {favorites.map((dist) => (
-                                <div
-                                    key={dist.id}
-                                    onClick={() => selectDistributorCard(dist.id)}
-                                    className="group relative bg-gradient-to-b from-slate-900 to-slate-950 hover:from-emerald-950/40 hover:to-slate-900 border border-amber-500/30 hover:border-emerald-500/60 p-5 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg hover:shadow-emerald-950/50 hover:-translate-y-1 flex flex-col justify-between"
-                                >
-                                    <div>
-                                        <div className="flex items-start justify-between gap-2 mb-3">
-                                            <div className="h-10 w-10 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
-                                                {dist.name.charAt(0)}
+                        {favorites.length === 0 ? (
+                            <div className="bg-slate-900/40 border border-dashed border-slate-800 rounded-2xl p-6 text-center text-slate-500 text-xs">
+                                <Star className="h-6 w-6 text-slate-600 mx-auto mb-2" />
+                                <p className="font-semibold text-slate-400">No favorite distributors pinned yet</p>
+                                <p className="text-[11px] text-slate-500 mt-1">Click the star icon on any distributor below to pin it here for quick access.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {favorites.map((dist) => (
+                                    <div
+                                        key={dist.id}
+                                        onClick={() => selectDistributorCard(dist.id)}
+                                        className="group relative bg-gradient-to-b from-slate-900 to-slate-950 hover:from-emerald-950/40 hover:to-slate-900 border border-amber-500/30 hover:border-emerald-500/60 p-5 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg hover:shadow-emerald-950/50 hover:-translate-y-1 flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                <div className="h-10 w-10 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
+                                                    {dist.name.charAt(0)}
+                                                </div>
+                                                <button
+                                                    onClick={(e) => toggleFavorite(e, dist.id)}
+                                                    title="Favorite toggle"
+                                                    className="p-1.5 text-amber-400 hover:scale-110 transition"
+                                                >
+                                                    <Star className="h-5 w-5 fill-amber-400" />
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={(e) => toggleFavorite(e, dist.id)}
-                                                title="Favorite toggle"
-                                                className="p-1.5 text-amber-400 hover:scale-110 transition"
-                                            >
-                                                <Star className="h-5 w-5 fill-amber-400" />
-                                            </button>
+
+                                            <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors line-clamp-1">
+                                                {dist.name}
+                                            </h3>
+                                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                                <span>📞</span>
+                                                <span>{dist.contact_number}</span>
+                                            </p>
                                         </div>
 
-                                        <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors line-clamp-1">
-                                            {dist.name}
-                                        </h3>
-                                        <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                                            <span>📞</span>
-                                            <span>{dist.contact_number}</span>
-                                        </p>
+                                        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                                            <span className="text-[11px] text-slate-400 bg-slate-800/60 px-2 py-1 rounded-md border border-slate-700/50">
+                                                {dist.products_count || 0} Products
+                                            </span>
+                                            <span className="text-xs font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                                                Manage Purchases &rarr;
+                                            </span>
+                                        </div>
                                     </div>
-
-                                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                                        <span className="text-[11px] text-slate-400 bg-slate-800/60 px-2 py-1 rounded-md border border-slate-700/50">
-                                            {dist.products_count || 0} Products
-                                        </span>
-                                        <span className="text-xs font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                                            Manage Purchases &rarr;
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* THE REST OF THE DISTRIBUTORS SECTION */}
@@ -878,7 +988,7 @@ export default function SalesPurchaseIndex({
                         </div>
 
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md">
-                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">12% VAT Adjusted</span>
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{defaultVatPercentage}% VAT Adjusted</span>
                             <div className="text-lg sm:text-xl font-bold text-teal-300 mt-1">₱{formatCurrency(summary.vat_adjusted_amount)}</div>
                         </div>
 
@@ -928,12 +1038,25 @@ export default function SalesPurchaseIndex({
 
                         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                             <button
-                                onClick={openAddModal}
-                                className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs rounded-lg shadow-md shadow-emerald-950/50 transition border border-emerald-400/30"
+                                type="button"
+                                onClick={handleExportCSV}
+                                disabled={purchases.length === 0}
+                                className="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-semibold text-xs rounded-lg transition border border-slate-700 shadow-sm"
+                                title="Export currently filtered spreadsheet to CSV"
                             >
-                                <Plus className="h-4 w-4" />
-                                <span>Add Purchase Transaction</span>
+                                <Download className="h-4 w-4 text-emerald-400" />
+                                <span>Export CSV</span>
                             </button>
+
+                            {canManage && (
+                                <button
+                                    onClick={openAddModal}
+                                    className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs rounded-lg shadow-md shadow-emerald-950/50 transition border border-emerald-400/30"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    <span>Add Purchase Transaction</span>
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -963,7 +1086,7 @@ export default function SalesPurchaseIndex({
                                         <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">DEALING PRICE</th>
                                         <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">DISCOUNT</th>
                                         <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">GROSS AMOUNT</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap bg-emerald-900/80">12% VAT</th>
+                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap bg-emerald-900/80">{defaultVatPercentage}% VAT</th>
                                         <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap bg-emerald-950 text-emerald-300">NET PROFIT</th>
                                         <th className="py-3 px-2 text-center whitespace-nowrap">ACTIONS</th>
                                     </tr>
@@ -1016,20 +1139,27 @@ export default function SalesPurchaseIndex({
                                                     {formatCurrency(Number(item.net_profit))}
                                                 </td>
                                                 <td className="py-2.5 px-2 text-center font-sans space-x-1">
-                                                    <button
-                                                        onClick={() => openEditModal(item)}
-                                                        className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
-                                                        title="Edit Row"
-                                                    >
-                                                        <Edit2 className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeletePurchase(item.id)}
-                                                        className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
-                                                        title="Delete Row"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </button>
+                                                    {canManage && (
+                                                        <button
+                                                            onClick={() => openEditModal(item)}
+                                                            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
+                                                            title="Edit Row"
+                                                        >
+                                                            <Edit2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {canDelete && (
+                                                        <button
+                                                            onClick={() => confirmDeletePurchase(item.id)}
+                                                            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
+                                                            title="Delete Row"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {!canManage && !canDelete && (
+                                                        <span className="text-[10px] text-slate-500 italic">View only</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))
@@ -1189,9 +1319,10 @@ export default function SalesPurchaseIndex({
                                         <select
                                             required
                                             value={formDistributorId}
-                                            onChange={(e) => handleFormDistributorChange(Number(e.target.value))}
+                                            onChange={(e) => handleFormDistributorChange(e.target.value === '' ? '' : Number(e.target.value))}
                                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
                                         >
+                                            <option value="">-- Select Distributor First --</option>
                                             {allDistributors.map(d => (
                                                 <option key={d.id} value={d.id}>
                                                     {d.name}
@@ -1202,26 +1333,42 @@ export default function SalesPurchaseIndex({
                                 </div>
                             </div>
 
-                            {/* Product Selector */}
+                            {/* Hierarchical Product Selector: Hidden until distributor is chosen */}
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Product of Distributor</label>
-                                {availableProductsForForm.length === 0 ? (
-                                    <div className="text-xs text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-900">
-                                        No products found for selected distributor. Please add items under Subsystem 2: Distributor Items first!
+                                {!formDistributorId ? (
+                                    <div className="p-3 bg-slate-950/70 border border-dashed border-slate-700 rounded-xl text-center">
+                                        <div className="flex items-center justify-center gap-2 text-slate-400 text-xs">
+                                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                            <span>Please select a <strong>Distributor</strong> above to view and choose its products</span>
+                                        </div>
+                                    </div>
+                                ) : availableProductsForForm.length === 0 ? (
+                                    <div className="text-xs text-rose-300 bg-rose-950/60 p-3 rounded-xl border border-rose-800/80 flex items-center justify-between">
+                                        <span>No products registered for this distributor yet.</span>
+                                        <a href="/products" className="text-rose-400 hover:text-white underline font-semibold text-xs ml-2">Add to Catalog &rarr;</a>
                                     </div>
                                 ) : (
-                                    <select
-                                        required
-                                        value={formProductId}
-                                        onChange={(e) => handleProductChange(Number(e.target.value))}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                                    >
-                                        {availableProductsForForm.map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.name} (Base Cost: ₱{p.purchase_price})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="transition-all duration-300">
+                                        <label className="block text-xs font-semibold text-emerald-400 mb-1 flex items-center justify-between">
+                                            <span>Product of Selected Distributor</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">
+                                                ({availableProductsForForm.length} products available)
+                                            </span>
+                                        </label>
+                                        <select
+                                            required
+                                            value={formProductId}
+                                            onChange={(e) => handleProductChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                            className="w-full bg-slate-950 border border-emerald-500/60 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                                        >
+                                            <option value="">-- Select Product --</option>
+                                            {availableProductsForForm.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} (Base Cost: ₱{p.purchase_price})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 )}
                             </div>
 
@@ -1298,7 +1445,7 @@ export default function SalesPurchaseIndex({
                                     <span className="font-bold">₱{formatCurrency(calcGrossAmount)}</span>
                                 </div>
                                 <div className="flex justify-between text-teal-300">
-                                    <span>12% VAT Adjusted Amount:</span>
+                                    <span>{formVatRate}% VAT Adjusted Amount:</span>
                                     <span className="font-bold">₱{formatCurrency(calcVatAdjusted)}</span>
                                 </div>
                                 <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1">
@@ -1680,6 +1827,22 @@ export default function SalesPurchaseIndex({
                     </div>
                 </div>
             )}
+
+            {/* Custom Styled Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                title="Delete Purchase Record"
+                message="Are you sure you want to permanently delete this purchase transaction? The inventory stock quantity in Subsystem 1 will be automatically adjusted to maintain balance."
+                confirmText="Yes, Delete Record"
+                isLoading={isDeleting}
+                onConfirm={handleExecuteDelete}
+                onCancel={() => {
+                    if (!isDeleting) {
+                        setDeleteModalOpen(false);
+                        setPurchaseToDelete(null);
+                    }
+                }}
+            />
         </MainLayout>
     );
 }

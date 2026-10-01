@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Distributor;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Purchase;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -28,16 +30,7 @@ class PurchaseController extends Controller
         $allDistributors = $distributorsQuery->orderBy('name')->get();
 
         $favorites = $allDistributors->where('is_favorite', true)->values();
-        // If favorites count < 4, auto fill top distributors to guarantee at least 4 cards in favorites section as requested
-        if ($favorites->count() < 4 && $allDistributors->count() > 0) {
-            $favIds = $favorites->pluck('id')->toArray();
-            $needed = 4 - $favorites->count();
-            $extraFavs = $allDistributors->whereNotIn('id', $favIds)->take($needed);
-            $favorites = $favorites->concat($extraFavs)->values();
-        }
-
-        $favIds = $favorites->pluck('id')->toArray();
-        $others = $allDistributors->whereNotIn('id', $favIds)->values();
+        $others = $allDistributors->where('is_favorite', false)->values();
 
         // Determine selected distributor IDs
         $selectedDistributorIds = [];
@@ -86,6 +79,16 @@ class PurchaseController extends Controller
 
             $purchasesQuery = Purchase::with(['distributor', 'product'])
                 ->whereIn('distributor_id', $selectedDistributorIds);
+
+            if (!empty($search)) {
+                $purchasesQuery->where(function($q) use ($search) {
+                    $q->whereHas('product', function($pq) use ($search) {
+                        $pq->where('name', 'like', "%{$search}%");
+                    })->orWhereHas('distributor', function($dq) use ($search) {
+                        $dq->where('name', 'like', "%{$search}%");
+                    });
+                });
+            }
 
             // Date Filtering Logic (Single Date, Month, or Date Range)
             if (!empty($startDate) && !empty($endDate)) {
@@ -165,7 +168,8 @@ class PurchaseController extends Controller
         $distributor = Distributor::findOrFail($validated['distributor_id']);
 
         $discount = $validated['discount'] ?? 0;
-        $vatRate = $validated['vat_percentage'] ?? 12.00;
+        $defaultVat = (float) Setting::getValue('default_vat_percentage', 12);
+        $vatRate = $validated['vat_percentage'] ?? $defaultVat;
         $quantity = $validated['quantity'];
         $purchasePrice = $validated['purchase_price'];
 
@@ -212,6 +216,20 @@ class PurchaseController extends Controller
             'selling_price' => $dealingPrice,
         ]);
 
+        ActivityLog::log('created', 'Purchase', $purchase->id,
+            "Recorded purchase: {$quantity}x {$product->name} from {$distributor->name} (₱" . number_format($totalPurchase, 2) . ")",
+            null,
+            ['quantity' => $quantity, 'purchase_price' => $purchasePrice, 'product' => $product->name, 'distributor' => $distributor->name]
+        );
+
+        // Notify about the purchase
+        \App\Models\Notification::notifyAll(
+            'purchase_recorded',
+            'New Purchase Recorded',
+            "{$quantity}x {$product->name} purchased from {$distributor->name} for ₱" . number_format($totalPurchase, 2),
+            '/sales-purchase?distributor_id=' . $distributor->id
+        );
+
         return redirect()->back()->with('success', 'Purchase recorded and stock added to Subsystem 1 Inventory!');
     }
 
@@ -225,9 +243,11 @@ class PurchaseController extends Controller
             'vat_percentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
+        $oldValues = $purchase->toArray();
         $oldQty = $purchase->quantity;
         $discount = $validated['discount'] ?? 0;
-        $vatRate = $validated['vat_percentage'] ?? 12.00;
+        $defaultVat = (float) Setting::getValue('default_vat_percentage', 12);
+        $vatRate = $validated['vat_percentage'] ?? $defaultVat;
         $quantity = $validated['quantity'];
         $purchasePrice = $validated['purchase_price'];
 
@@ -260,11 +280,30 @@ class PurchaseController extends Controller
             $inventory->save();
         }
 
+        ActivityLog::log('updated', 'Purchase', $purchase->id,
+            "Updated purchase record #{$purchase->id}",
+            $oldValues,
+            $validated
+        );
+
+        \App\Models\Notification::notifyAll(
+            'purchase_updated',
+            'Purchase Transaction Updated',
+            "Purchase record #{$purchase->id} ({$purchase->product?->name}) was updated.",
+            '/sales-purchase?distributor_id=' . $purchase->distributor_id,
+            "Quantity: {$quantity} | Purchase Price: ₱{$purchasePrice}"
+        );
+
         return redirect()->back()->with('success', 'Purchase record updated.');
     }
 
     public function destroy(Purchase $purchase)
     {
+        $oldValues = $purchase->toArray();
+        $prodName = $purchase->product?->name ?? 'Item';
+        $distId = $purchase->distributor_id;
+        $qty = $purchase->quantity;
+
         // Revert quantity from inventory
         $inventory = Inventory::where('product_id', $purchase->product_id)->first();
         if ($inventory) {
@@ -273,6 +312,19 @@ class PurchaseController extends Controller
         }
 
         $purchase->delete();
+
+        ActivityLog::log('deleted', 'Purchase', null,
+            "Deleted purchase record (Product: {$prodName}, Qty: {$qty})",
+            $oldValues,
+            null
+        );
+
+        \App\Models\Notification::notifyAll(
+            'purchase_deleted',
+            'Purchase Record Deleted',
+            "A purchase entry for {$qty}x {$prodName} was removed.",
+            '/sales-purchase?distributor_id=' . $distId
+        );
 
         return redirect()->back()->with('success', 'Purchase record deleted and inventory adjusted.');
     }

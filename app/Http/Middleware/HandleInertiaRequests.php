@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Notification;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,11 +37,38 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'role_label' => $user->role_label,
+                ] : null,
+            ],
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+            ],
+            'notifications' => fn () => $user
+                ? [
+                    'unread_count' => Notification::where('user_id', $user->id)->where('is_read', false)->count(),
+                    'items' => Notification::where('user_id', $user->id)
+                        ->orderBy('created_at', 'desc')
+                        ->limit(10)
+                        ->get(),
+                ]
+                : ['unread_count' => 0, 'items' => []],
+            'settings' => fn () => [
+                'company_name' => Setting::getValue('company_name', 'WINZELLE'),
+                'low_stock_threshold' => (int) Setting::getValue('low_stock_threshold', 15),
+                'default_vat_percentage' => (float) Setting::getValue('default_vat_percentage', 12),
+                'notification_style' => Setting::getValue('notification_style', 'number'),
             ],
         ];
     }

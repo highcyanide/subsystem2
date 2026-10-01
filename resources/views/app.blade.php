@@ -11,8 +11,19 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         <x-inertia::head>
-            <title>{{ config('app.name', 'Winzelle System') }}</title>
+            <title>{{ \App\Models\Setting::getValue('company_name', config('app.name', 'Winzelle System')) }}</title>
         </x-inertia::head>
+        <script>
+            try {
+                if (localStorage.getItem('theme') === 'light') {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('theme-light');
+                } else {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('theme-light');
+                }
+            } catch (e) {}
+        </script>
     </head>
     <body class="font-sans antialiased bg-slate-950 text-slate-100">
         <x-inertia::app />

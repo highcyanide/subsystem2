@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
+import ConfirmModal from '@/Components/ConfirmModal';
 import { 
     PackagePlus, 
     Plus, 
@@ -34,18 +35,41 @@ interface Props {
     distributors: Distributor[];
     selectedDistributor: Distributor | null;
     products: Product[];
+    categories?: string[];
+    filters?: { search: string };
 }
 
-export default function ProductsIndex({ distributors, selectedDistributor, products }: Props) {
+export default function ProductsIndex({ distributors, selectedDistributor, products, categories = [], filters }: Props) {
+    const { auth } = usePage().props as any;
+    const userRole = auth?.user?.role || 'guest';
+    const canManage = userRole === 'admin' || userRole === 'owner';
+    const canDelete = userRole === 'admin';
+
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [prodToDelete, setProdToDelete] = useState<{ id: number; name: string } | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+    const [searchQuery, setSearchQuery] = useState(filters?.search || '');
+    const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const [name, setName] = useState('');
     const [sku, setSku] = useState('');
-    const [category, setCategory] = useState('Carbonated');
+    const [category, setCategory] = useState('');
     const [purchasePrice, setPurchasePrice] = useState<number>(0);
     const [defaultDiscount, setDefaultDiscount] = useState<number>(0);
     const [defaultDealingPrice, setDefaultDealingPrice] = useState<number>(0);
+
+    // Live debounced search
+    const handleSearch = (value: string) => {
+        setSearchQuery(value);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+            router.get('/products', { distributor_id: selectedDistributor?.id, search: value }, { preserveState: true, preserveScroll: true });
+        }, 300);
+    };
 
     const handleDistributorChange = (distId: number) => {
         router.get('/products', { distributor_id: distId }, { preserveState: true });
@@ -55,10 +79,10 @@ export default function ProductsIndex({ distributors, selectedDistributor, produ
         setEditingProduct(null);
         setName('');
         setSku('');
-        setCategory('Carbonated');
-        setPurchasePrice(100);
-        setDefaultDiscount(5);
-        setDefaultDealingPrice(105);
+        setCategory('');
+        setPurchasePrice(0);
+        setDefaultDiscount(0);
+        setDefaultDealingPrice(0);
         setIsModalOpen(true);
     };
 
@@ -98,10 +122,22 @@ export default function ProductsIndex({ distributors, selectedDistributor, produ
         }
     };
 
-    const handleDelete = (prodId: number, prodName: string) => {
-        if (confirm(`Are you sure you want to delete product "${prodName}"?`)) {
-            router.delete(`/products/${prodId}`, { preserveScroll: true });
-        }
+    const confirmDelete = (prodId: number, prodName: string) => {
+        setProdToDelete({ id: prodId, name: prodName });
+        setDeleteModalOpen(true);
+    };
+
+    const handleExecuteDelete = () => {
+        if (!prodToDelete) return;
+        setIsDeleting(true);
+        router.delete(`/products/${prodToDelete.id}`, {
+            preserveScroll: true,
+            onFinish: () => {
+                setIsDeleting(false);
+                setDeleteModalOpen(false);
+                setProdToDelete(null);
+            }
+        });
     };
 
     const formatCurrency = (amount: number) => {
@@ -131,13 +167,24 @@ export default function ProductsIndex({ distributors, selectedDistributor, produ
                 </div>
 
                 {selectedDistributor && (
-                    <button
-                        onClick={openAddModal}
-                        className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition border border-emerald-400/30"
-                    >
-                        <Plus className="h-4 w-4" />
-                        <span>Add Product for {selectedDistributor.name}</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={(e) => handleSearch(e.target.value)}
+                            className="w-48 lg:w-64 bg-slate-950 border border-slate-700 rounded-xl pl-3 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                        />
+                        {canManage && (
+                            <button
+                                onClick={openAddModal}
+                                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition border border-emerald-400/30"
+                            >
+                                <Plus className="h-4 w-4" />
+                                <span>Add Product for {selectedDistributor.name}</span>
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -227,20 +274,27 @@ export default function ProductsIndex({ distributors, selectedDistributor, produ
                                                 {formatCurrency(Number(p.default_dealing_price))}
                                             </td>
                                             <td className="py-3 px-4 text-center space-x-1">
-                                                <button
-                                                    onClick={() => openEditModal(p)}
-                                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
-                                                    title="Adjust Name or Price"
-                                                >
-                                                    <Edit2 className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(p.id, p.name)}
-                                                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
-                                                    title="Delete Product"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
+                                                {canManage && (
+                                                    <button
+                                                        onClick={() => openEditModal(p)}
+                                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
+                                                        title="Adjust Name or Price"
+                                                    >
+                                                        <Edit2 className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                {canDelete && (
+                                                    <button
+                                                        onClick={() => confirmDelete(p.id, p.name)}
+                                                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
+                                                        title="Delete Product"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                {!canManage && !canDelete && (
+                                                    <span className="text-[10px] text-slate-500 italic">View only</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))
@@ -380,6 +434,21 @@ export default function ProductsIndex({ distributors, selectedDistributor, produ
                     </div>
                 </div>
             )}
+            {/* Custom Styled Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                title="Delete Product"
+                message={`Are you sure you want to permanently delete product "${prodToDelete?.name}"? Stock and historical transactions will be affected.`}
+                confirmText="Yes, Delete Product"
+                isLoading={isDeleting}
+                onConfirm={handleExecuteDelete}
+                onCancel={() => {
+                    if (!isDeleting) {
+                        setDeleteModalOpen(false);
+                        setProdToDelete(null);
+                    }
+                }}
+            />
         </MainLayout>
     );
 }

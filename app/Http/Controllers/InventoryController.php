@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Inventory;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -42,6 +44,9 @@ class InventoryController extends Controller
             return $item->quantity * $item->purchase_price;
         });
 
+        // Get low stock threshold from settings
+        $lowStockThreshold = (int) Setting::getValue('low_stock_threshold', 15);
+
         return Inertia::render('Inventory/Index', [
             'inventories' => $inventories,
             'categories' => $categories,
@@ -56,6 +61,7 @@ class InventoryController extends Controller
                 'category' => $category,
                 'distributor' => $distributor,
             ],
+            'lowStockThreshold' => $lowStockThreshold,
         ]);
     }
 
@@ -65,7 +71,25 @@ class InventoryController extends Controller
             'quantity' => 'required|integer|min:0',
         ]);
 
+        $oldQty = $inventory->quantity;
         $inventory->update(['quantity' => $validated['quantity']]);
+
+        ActivityLog::log('updated', 'Inventory', $inventory->id,
+            "Updated stock for {$inventory->product_name}: {$oldQty} → {$validated['quantity']}",
+            ['quantity' => $oldQty],
+            ['quantity' => $validated['quantity']]
+        );
+
+        // Check for low stock notification
+        $threshold = (int) Setting::getValue('low_stock_threshold', 15);
+        if ($validated['quantity'] <= $threshold && $validated['quantity'] > 0) {
+            \App\Models\Notification::notifyAll(
+                'low_stock',
+                'Low Stock Alert',
+                "{$inventory->product_name} is running low ({$validated['quantity']} units remaining).",
+                '/inventory'
+            );
+        }
 
         return redirect()->back()->with('success', 'Stock quantity updated.');
     }

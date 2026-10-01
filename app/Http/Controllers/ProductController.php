@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Distributor;
 use App\Models\Inventory;
 use App\Models\Product;
@@ -13,21 +14,39 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $distributorId = $request->query('distributor_id');
-        
+        $search = $request->query('search', '');
+
         $distributors = Distributor::orderBy('name')->get();
-        
-        $selectedDistributor = $distributorId 
+
+        $selectedDistributor = $distributorId
             ? Distributor::find($distributorId)
             : $distributors->first();
 
-        $products = $selectedDistributor 
-            ? Product::where('distributor_id', $selectedDistributor->id)->orderBy('name')->get()
-            : collect([]);
+        $productsQuery = $selectedDistributor
+            ? Product::where('distributor_id', $selectedDistributor->id)
+            : Product::query()->whereRaw('0 = 1'); // empty query
+
+        if (!empty($search) && $selectedDistributor) {
+            $productsQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%")
+                  ->orWhere('category', 'like', "%{$search}%");
+            });
+        }
+
+        $products = $productsQuery->orderBy('name')->get();
+
+        // Get distinct categories for the dropdown
+        $categories = Product::select('category')->distinct()->orderBy('category')->pluck('category');
 
         return Inertia::render('Products/Index', [
             'distributors' => $distributors,
             'selectedDistributor' => $selectedDistributor,
             'products' => $products,
+            'categories' => $categories,
+            'filters' => [
+                'search' => $search,
+            ],
         ]);
     }
 
@@ -73,6 +92,20 @@ class ProductController extends Controller
             ]
         );
 
+        ActivityLog::log('created', 'Product', $product->id,
+            "Added product: {$product->name} (Distributor: {$distributor->name})",
+            null,
+            $validated
+        );
+
+        \App\Models\Notification::notifyAll(
+            'product_added',
+            'New Product Added',
+            "Product '{$product->name}' was added under {$distributor->name}.",
+            '/products?distributor_id=' . $distributor->id,
+            "SKU: {$product->sku} | Purchase Price: ₱{$product->purchase_price} | Dealing Price: ₱{$product->default_dealing_price}"
+        );
+
         return redirect()->back()->with('success', 'Product created successfully!');
     }
 
@@ -87,6 +120,7 @@ class ProductController extends Controller
             'default_dealing_price' => 'nullable|numeric|min:0',
         ]);
 
+        $oldValues = $product->toArray();
         $product->update($validated);
 
         // Sync to inventory table
@@ -103,12 +137,44 @@ class ProductController extends Controller
             ]
         );
 
+        ActivityLog::log('updated', 'Product', $product->id,
+            "Updated product: {$product->name}",
+            $oldValues,
+            $validated
+        );
+
+        \App\Models\Notification::notifyAll(
+            'product_updated',
+            'Product Price/Details Updated',
+            "Product '{$product->name}' has been updated.",
+            '/products?distributor_id=' . $product->distributor_id,
+            "Cost: ₱{$product->purchase_price} | Dealing: ₱{$product->default_dealing_price}"
+        );
+
         return redirect()->back()->with('success', 'Product updated successfully!');
     }
 
     public function destroy(Product $product)
     {
+        $name = $product->name;
+        $distId = $product->distributor_id;
+        $oldValues = $product->toArray();
+
         $product->delete();
+
+        ActivityLog::log('deleted', 'Product', null,
+            "Deleted product: {$name}",
+            $oldValues,
+            null
+        );
+
+        \App\Models\Notification::notifyAll(
+            'product_deleted',
+            'Product Removed',
+            "Product '{$name}' was deleted from the catalog.",
+            '/products?distributor_id=' . $distId
+        );
+
         return redirect()->back()->with('success', 'Product removed successfully.');
     }
 }

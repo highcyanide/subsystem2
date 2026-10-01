@@ -12,8 +12,10 @@ import {
     Edit3,
     Check,
     X,
-    Layers
+    Layers,
+    Download
 } from 'lucide-react';
+import { downloadCSV } from '@/utils/exportCsv';
 
 interface InventoryItem {
     id: number;
@@ -44,6 +46,7 @@ interface Props {
         category: string;
         distributor: string;
     };
+    lowStockThreshold?: number;
 }
 
 export default function InventoryIndex({
@@ -51,23 +54,33 @@ export default function InventoryIndex({
     categories,
     distributors,
     summary,
-    filters
+    filters,
+    lowStockThreshold = 15
 }: Props) {
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [selectedCategory, setSelectedCategory] = useState(filters.category || '');
     const [selectedDistributor, setSelectedDistributor] = useState(filters.distributor || '');
+    const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     
     // Quick inline stock editor
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editQty, setEditQty] = useState<number>(0);
 
-    const handleFilter = (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
+    const handleFilter = (overrides: Record<string, string> = {}) => {
         router.get('/inventory', {
-            search: searchQuery,
-            category: selectedCategory,
-            distributor: selectedDistributor,
+            search: overrides.search ?? searchQuery,
+            category: overrides.category ?? selectedCategory,
+            distributor: overrides.distributor ?? selectedDistributor,
         }, { preserveState: true });
+    };
+
+    // Live debounced search
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+            handleFilter({ search: value });
+        }, 300);
     };
 
     const handleClearFilters = () => {
@@ -97,6 +110,34 @@ export default function InventoryIndex({
         }).format(amount || 0);
     };
 
+    const handleExportCSV = () => {
+        const headers = [
+            'Product ID',
+            'SKU',
+            'Category',
+            'Distributor',
+            'Product Name',
+            'Purchase Price (PHP)',
+            'Selling Price (PHP)',
+            'Quantity In Stock',
+            'Inventory Valuation (PHP)'
+        ];
+
+        const rows = inventories.map(item => [
+            item.product_id,
+            item.sku,
+            item.category,
+            item.distributor_name,
+            item.product_name,
+            item.purchase_price,
+            item.selling_price,
+            item.quantity,
+            (Number(item.purchase_price) * Number(item.quantity)).toFixed(2)
+        ]);
+
+        downloadCSV(`winzelle_inventory_report_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+    };
+
     return (
         <MainLayout title="Inventory Management">
             <Head title="Subsystem 1: Module 1 - Inventory Management" />
@@ -116,6 +157,16 @@ export default function InventoryIndex({
                 </div>
 
                 <div className="flex items-center space-x-2">
+                    <button
+                        type="button"
+                        onClick={handleExportCSV}
+                        disabled={inventories.length === 0}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition shadow-sm"
+                        title="Export current inventory table to CSV"
+                    >
+                        <Download className="h-4 w-4 text-emerald-400" />
+                        <span>Export CSV</span>
+                    </button>
                     <span className="text-xs bg-emerald-950 text-emerald-300 border border-emerald-800/80 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium">
                         <CheckCircle className="h-4 w-4 text-emerald-400" />
                         <span>Auto-synced with Sales & Purchases</span>
@@ -158,7 +209,7 @@ export default function InventoryIndex({
 
             {/* Filter Bar */}
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl mb-6 shadow-md">
-                <form onSubmit={handleFilter} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     {/* Search */}
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -166,7 +217,7 @@ export default function InventoryIndex({
                             type="text"
                             placeholder="Search SKU, Product, or Distributor..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                         />
                     </div>
@@ -174,7 +225,7 @@ export default function InventoryIndex({
                     {/* Category Filter */}
                     <select
                         value={selectedCategory}
-                        onChange={(e) => { setSelectedCategory(e.target.value); handleFilter(); }}
+                        onChange={(e) => { setSelectedCategory(e.target.value); handleFilter({ category: e.target.value }); }}
                         className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                     >
                         <option value="">All Categories</option>
@@ -186,7 +237,7 @@ export default function InventoryIndex({
                     {/* Distributor Filter */}
                     <select
                         value={selectedDistributor}
-                        onChange={(e) => { setSelectedDistributor(e.target.value); handleFilter(); }}
+                        onChange={(e) => { setSelectedDistributor(e.target.value); handleFilter({ distributor: e.target.value }); }}
                         className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                     >
                         <option value="">All Distributors</option>
@@ -198,20 +249,14 @@ export default function InventoryIndex({
                     {/* Filter action buttons */}
                     <div className="flex items-center gap-2">
                         <button
-                            type="submit"
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2 px-3 rounded-lg shadow transition"
-                        >
-                            Filter
-                        </button>
-                        <button
                             type="button"
                             onClick={handleClearFilters}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-3 rounded-lg transition"
+                            className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-3 rounded-lg transition"
                         >
-                            Clear
+                            Clear Filters
                         </button>
                     </div>
-                </form>
+                </div>
             </div>
 
             {/* Inventory Table as requested for Subsystem 1 Module 1 */}
@@ -252,7 +297,7 @@ export default function InventoryIndex({
                             ) : (
                                 inventories.map((item) => {
                                     const isEditing = editingId === item.id;
-                                    const isLowStock = item.quantity <= 15;
+                                    const isLowStock = item.quantity <= lowStockThreshold;
 
                                     return (
                                         <tr key={item.id} className="hover:bg-slate-850/80 transition-colors">
