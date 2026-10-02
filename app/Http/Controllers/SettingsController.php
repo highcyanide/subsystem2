@@ -30,11 +30,13 @@ class SettingsController extends Controller
             'notification_style' => 'required|in:number,dot',
         ]);
 
+        $changedCount = 0;
         foreach ($validated as $key => $value) {
             $oldValue = Setting::getValue($key);
             Setting::setValue($key, $value);
 
             if ($oldValue !== (string) $value) {
+                $changedCount++;
                 ActivityLog::log(
                     'updated',
                     'Setting',
@@ -42,6 +44,17 @@ class SettingsController extends Controller
                     "Changed setting '{$key}' from '{$oldValue}' to '{$value}'"
                 );
             }
+        }
+
+        if ($changedCount > 0) {
+            $actor = auth()->user();
+            $actorName = $actor ? $actor->name : 'Administrator';
+            \App\Models\Notification::notifyAll(
+                'settings_updated',
+                'System Settings Updated',
+                "System settings were updated by {$actorName}.",
+                '/settings'
+            );
         }
 
         return redirect()->back()->with('success', 'Settings updated successfully!');
@@ -111,6 +124,13 @@ class SettingsController extends Controller
             "Created user '{$user->name}' with role '{$user->role}'"
         );
 
+        \App\Models\Notification::notifyAll(
+            'user_created',
+            'New User Account Created',
+            "User '{$user->name}' was added with role '{$user->role}'.",
+            '/settings'
+        );
+
         return redirect()->back()->with('success', "User '{$user->name}' created successfully!");
     }
 
@@ -126,6 +146,7 @@ class SettingsController extends Controller
         ]);
 
         $oldName = $user->name;
+        $oldRole = $user->role;
         $user->name = $validated['name'];
         if (isset($validated['username'])) {
             $user->username = $validated['username'];
@@ -144,7 +165,14 @@ class SettingsController extends Controller
             'updated',
             'User',
             $user->id,
-            "Updated user #{$user->id} ({$oldName} → {$user->name}, role: {$user->role})"
+            "Updated user #{$user->id} ({$oldName} → {$user->name}, role: {$oldRole} → {$user->role})"
+        );
+
+        \App\Models\Notification::notifyAll(
+            'user_updated',
+            'User Account Updated',
+            "User '{$user->name}' details were updated (Role: {$user->role}).",
+            '/settings'
         );
 
         return redirect()->back()->with('success', "User '{$user->name}' updated successfully!");
@@ -161,6 +189,13 @@ class SettingsController extends Controller
 
         ActivityLog::log('deleted', 'User', null, "Archived user: {$name}");
 
+        \App\Models\Notification::notifyAll(
+            'user_archived',
+            'User Account Archived',
+            "User '{$name}' was archived.",
+            '/settings'
+        );
+
         return redirect()->back()->with('success', "User '{$name}' has been archived.");
     }
 
@@ -170,6 +205,13 @@ class SettingsController extends Controller
         $user->restore();
 
         ActivityLog::log('updated', 'User', $user->id, "Restored archived user: {$user->name}");
+
+        \App\Models\Notification::notifyAll(
+            'user_restored',
+            'User Account Restored',
+            "User account '{$user->name}' was restored.",
+            '/settings'
+        );
 
         return redirect()->back()->with('success', "User '{$user->name}' restored successfully!");
     }

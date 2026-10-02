@@ -83,27 +83,53 @@ class InventoryController extends Controller
             'quantity' => 'required|integer|min:0',
         ]);
 
-        $oldQty = $inventory->quantity;
-        $inventory->update(['quantity' => $validated['quantity']]);
+        $oldQty = (int) $inventory->quantity;
+        $newQty = (int) $validated['quantity'];
+        $inventory->update(['quantity' => $newQty]);
+
+        $actor = auth()->user();
+        $actorName = $actor ? $actor->name : 'Someone';
+        $actorRole = $actor ? ucfirst($actor->role) : 'User';
 
         ActivityLog::log('updated', 'Inventory', $inventory->id,
-            "Updated stock for {$inventory->product_name}: {$oldQty} → {$validated['quantity']}",
+            "{$actorRole} {$actorName} updated stock for {$inventory->product_name}: {$oldQty} → {$newQty}",
             ['quantity' => $oldQty],
-            ['quantity' => $validated['quantity']]
+            ['quantity' => $newQty]
         );
 
-        // Check for low stock notification
+        $diff = $newQty - $oldQty;
+        $change = $diff > 0 ? "+{$diff}" : "{$diff}";
+
+        // Always notify all users that stock was updated
+        \App\Models\Notification::notifyAll(
+            'stock_adjusted',
+            'Inventory Stock Adjusted',
+            "Stock for '{$inventory->product_name}' was changed from {$oldQty} to {$newQty} ({$change} units) by {$actorName}.",
+            '/inventory',
+            "Product: {$inventory->product_name} | SKU: {$inventory->sku} | Distributor: {$inventory->distributor_name} | Adjusted by: {$actorName} ({$actorRole})"
+        );
+
+        // Check for low stock or out of stock alert
         $threshold = (int) Setting::getValue('low_stock_threshold', 15);
-        if ($validated['quantity'] <= $threshold && $validated['quantity'] > 0) {
+        if ($newQty === 0) {
+            \App\Models\Notification::notifyAll(
+                'out_of_stock',
+                'Out of Stock Alert',
+                "{$inventory->product_name} is now OUT OF STOCK (0 units remaining).",
+                '/inventory',
+                "Please re-order immediately from {$inventory->distributor_name}."
+            );
+        } elseif ($newQty <= $threshold) {
             \App\Models\Notification::notifyAll(
                 'low_stock',
                 'Low Stock Alert',
-                "{$inventory->product_name} is running low ({$validated['quantity']} units remaining).",
-                '/inventory'
+                "{$inventory->product_name} is running low ({$newQty} units remaining, threshold: {$threshold}).",
+                '/inventory',
+                "Distributor: {$inventory->distributor_name} | SKU: {$inventory->sku}"
             );
         }
 
-        return redirect()->back()->with('success', 'Stock quantity updated.');
+        return redirect()->back()->with('success', "Stock updated for {$inventory->product_name}: {$oldQty} → {$newQty}.");
     }
 
     public function batchUpdate(Request $request)
@@ -121,36 +147,118 @@ class InventoryController extends Controller
         $action = $validated['action'];
         $count = count($ids);
 
+        $actor = auth()->user();
+        $actorName = $actor ? $actor->name : 'Someone';
+        $actorRole = $actor ? ucfirst($actor->role) : 'User';
+        $threshold = (int) Setting::getValue('low_stock_threshold', 15);
+
         if ($action === 'set_quantity') {
             $qty = (int) $validated['quantity'];
             Inventory::whereIn('id', $ids)->update(['quantity' => $qty]);
+
             ActivityLog::log('updated', 'Inventory', null,
-                "Batch updated stock quantity to {$qty} for {$count} item(s)",
+                "{$actorRole} {$actorName} batch updated stock quantity to {$qty} for {$count} item(s)",
                 null,
                 ['ids' => $ids, 'quantity' => $qty]
             );
+
+            \App\Models\Notification::notifyAll(
+                'batch_stock_adjusted',
+                'Batch Stock Quantity Set',
+                "{$actorRole} {$actorName} updated stock to {$qty} units for {$count} items.",
+                '/inventory',
+                "Quantity: {$qty} units | Affected items: {$count} | Updated by: {$actorName}"
+            );
+
+            if ($qty === 0) {
+                \App\Models\Notification::notifyAll(
+                    'out_of_stock',
+                    'Out of Stock Alert (Batch)',
+                    "{$count} items were set to 0 units and are now OUT OF STOCK.",
+                    '/inventory'
+                );
+            } elseif ($qty <= $threshold) {
+                \App\Models\Notification::notifyAll(
+                    'low_stock',
+                    'Low Stock Alert (Batch)',
+                    "{$count} items were set to {$qty} units (low stock threshold: {$threshold}).",
+                    '/inventory'
+                );
+            }
+
             $msg = "Successfully updated stock quantity to {$qty} for {$count} item(s).";
         } elseif ($action === 'add_quantity') {
             $adj = (int) $validated['adjustment'];
+            $sign = $adj >= 0 ? "+{$adj}" : "{$adj}";
+
+            $lowStockItems = [];
+            $outOfStockItems = [];
+
             foreach (Inventory::whereIn('id', $ids)->get() as $inv) {
                 $newQty = max(0, $inv->quantity + $adj);
                 $inv->update(['quantity' => $newQty]);
+                if ($newQty === 0) {
+                    $outOfStockItems[] = $inv->product_name;
+                } elseif ($newQty <= $threshold) {
+                    $lowStockItems[] = $inv->product_name;
+                }
             }
-            $sign = $adj >= 0 ? "+{$adj}" : "{$adj}";
+
             ActivityLog::log('updated', 'Inventory', null,
-                "Batch adjusted stock by {$sign} for {$count} item(s)",
+                "{$actorRole} {$actorName} batch adjusted stock by {$sign} for {$count} item(s)",
                 null,
                 ['ids' => $ids, 'adjustment' => $adj]
             );
+
+            \App\Models\Notification::notifyAll(
+                'batch_stock_adjusted',
+                'Batch Stock Adjusted',
+                "{$actorRole} {$actorName} adjusted stock by {$sign} units across {$count} items.",
+                '/inventory',
+                "Adjustment: {$sign} across {$count} products | Updated by: {$actorName}"
+            );
+
+            if (count($outOfStockItems) > 0) {
+                $sample = implode(', ', array_slice($outOfStockItems, 0, 3));
+                if (count($outOfStockItems) > 3) $sample .= " and " . (count($outOfStockItems) - 3) . " more";
+                \App\Models\Notification::notifyAll(
+                    'out_of_stock',
+                    'Out of Stock Alert (Batch)',
+                    count($outOfStockItems) . " items are now out of stock ({$sample}).",
+                    '/inventory'
+                );
+            }
+
+            if (count($lowStockItems) > 0) {
+                $sample = implode(', ', array_slice($lowStockItems, 0, 3));
+                if (count($lowStockItems) > 3) $sample .= " and " . (count($lowStockItems) - 3) . " more";
+                \App\Models\Notification::notifyAll(
+                    'low_stock',
+                    'Low Stock Alert (Batch)',
+                    count($lowStockItems) . " items are now running low on stock ({$sample}).",
+                    '/inventory'
+                );
+            }
+
             $msg = "Successfully adjusted stock by {$sign} for {$count} item(s).";
         } elseif ($action === 'set_category') {
             $cat = trim($validated['category']);
             Inventory::whereIn('id', $ids)->update(['category' => $cat]);
+
             ActivityLog::log('updated', 'Inventory', null,
-                "Batch updated category to '{$cat}' for {$count} item(s)",
+                "{$actorRole} {$actorName} batch updated category to '{$cat}' for {$count} item(s)",
                 null,
                 ['ids' => $ids, 'category' => $cat]
             );
+
+            \App\Models\Notification::notifyAll(
+                'batch_category_updated',
+                'Batch Category Updated',
+                "{$actorRole} {$actorName} moved {$count} items to category '{$cat}'.",
+                '/inventory',
+                "Category: {$cat} | Items: {$count} | Updated by: {$actorName}"
+            );
+
             $msg = "Successfully updated category to '{$cat}' for {$count} item(s).";
         }
 
