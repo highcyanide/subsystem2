@@ -16,20 +16,21 @@ if ($zip->open(__DIR__ . '/../docs/template-inventory.xlsx') === true) {
 
     if (($sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml')) !== false) {
         $xml = simplexml_load_string($sheetXml);
-        echo "\nFIRST 10 ROWS:\n";
-        $count = 0;
-        foreach ($xml->sheetData->row as $row) {
+        echo "\nTOTAL ROWS: " . count($xml->sheetData->row) . "\n";
+        $allRows = $xml->sheetData->row;
+        $total = count($allRows);
+        for ($i = max(0, $total - 8); $i < $total; $i++) {
+            $row = $allRows[$i];
             $cells = [];
             foreach ($row->c as $cell) {
                 $val = (string)$cell->v;
                 if ((string)$cell['t'] === 's' && isset($strings[(int)$val])) {
                     $val = $strings[(int)$val];
                 }
-                $cells[] = (string)$cell['r'] . ': ' . $val;
+                $f = (string)($cell->f ?? '');
+                $cells[] = (string)$cell['r'] . ': ' . ($f ? "f($f)=" : '') . $val;
             }
             echo "Row " . (string)$row['r'] . ": " . implode(' | ', $cells) . "\n";
-            $count++;
-            if ($count >= 10) break;
         }
     }
     $zip->close();

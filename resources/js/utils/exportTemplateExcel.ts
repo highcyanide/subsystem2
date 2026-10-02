@@ -64,7 +64,7 @@ export async function exportSalesPurchaseExcel(
     // Row 1 & 2: Merged Title at D1:E2 matching template-inventory.xlsx
     ws.mergeCells('D1:E2');
     const titleCell = ws.getCell('D1');
-    titleCell.value = `${companyName.toUpperCase()} SALES & PURCHASE`;
+    titleCell.value = `${companyName.toUpperCase()} STORE SALES & PURCHASE`;
     titleCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.fill = {
         type: 'pattern',
@@ -125,6 +125,12 @@ export async function exportSalesPurchaseExcel(
 
     const vatMultiplier = (100 - vatPercentage) / 100;
 
+    let sumQty = 0;
+    let sumTotalPurchase = 0;
+    let sumGrossAmount = 0;
+    let sumVatAdjusted = 0;
+    let sumNetProfit = 0;
+
     // Data rows starting at Row 4
     purchases.forEach((item, index) => {
         const rowNum = 4 + index;
@@ -153,6 +159,12 @@ export async function exportSalesPurchaseExcel(
         const grossAmount = qty * dealingPrice;
         const vatAmount = grossAmount * vatMultiplier;
         const netProfit = grossAmount - totalPurchase;
+
+        sumQty += qty;
+        sumTotalPurchase += totalPurchase;
+        sumGrossAmount += grossAmount;
+        sumVatAdjusted += vatAmount;
+        sumNetProfit += netProfit;
 
         // 1. DATE
         const c1 = row.getCell(1);
@@ -251,29 +263,40 @@ export async function exportSalesPurchaseExcel(
         cell.font = { name: 'Calibri', size: 11, bold: true };
     }
 
-    totalsRow.getCell(5).value = 'TOTALS:';
-    totalsRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
+    totalsRow.getCell(2).value = 'TOTALS:';
+    totalsRow.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
 
     if (totalRowsCount > 0) {
+        // C: Total Quantity
+        totalsRow.getCell(3).value = { formula: `SUM(C4:C${totalsRowNum - 1})`, result: sumQty };
+        totalsRow.getCell(3).numFmt = '#,##0';
+        totalsRow.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
+
         // F: Total purchase sum formula
-        totalsRow.getCell(6).value = { formula: `SUM(F4:F${totalsRowNum - 1})` };
+        totalsRow.getCell(6).value = { formula: `SUM(F4:F${totalsRowNum - 1})`, result: sumTotalPurchase };
         totalsRow.getCell(6).numFmt = '#,##0.00';
         totalsRow.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
 
         // I: Gross amount sum formula
-        totalsRow.getCell(9).value = { formula: `SUM(I4:I${totalsRowNum - 1})` };
+        totalsRow.getCell(9).value = { formula: `SUM(I4:I${totalsRowNum - 1})`, result: sumGrossAmount };
         totalsRow.getCell(9).numFmt = '#,##0.00';
         totalsRow.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
 
         // J: VAT sum formula
-        totalsRow.getCell(10).value = { formula: `SUM(J4:J${totalsRowNum - 1})` };
+        totalsRow.getCell(10).value = { formula: `SUM(J4:J${totalsRowNum - 1})`, result: sumVatAdjusted };
         totalsRow.getCell(10).numFmt = '#,##0.00';
         totalsRow.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
 
         // K: Net profit sum formula
-        totalsRow.getCell(11).value = { formula: `SUM(K4:K${totalsRowNum - 1})` };
+        totalsRow.getCell(11).value = { formula: `SUM(K4:K${totalsRowNum - 1})`, result: sumNetProfit };
         totalsRow.getCell(11).numFmt = '#,##0.00';
         totalsRow.getCell(11).alignment = { horizontal: 'right', vertical: 'middle' };
+    } else {
+        totalsRow.getCell(3).value = 0;
+        totalsRow.getCell(6).value = 0;
+        totalsRow.getCell(9).value = 0;
+        totalsRow.getCell(10).value = 0;
+        totalsRow.getCell(11).value = 0;
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -377,6 +400,9 @@ export async function exportInventoryExcel(
         };
     });
 
+    let sumQty = 0;
+    let sumValuation = 0;
+
     // Data rows
     inventories.forEach((item, index) => {
         const rowNum = 4 + index;
@@ -401,6 +427,9 @@ export async function exportInventoryExcel(
         const pPrice = Number(item.purchase_price) || 0;
         const sPrice = Number(item.selling_price) || 0;
         const valuation = Number(item.total_valuation) || (qty * pPrice);
+
+        sumQty += qty;
+        sumValuation += valuation;
 
         // Product ID
         const c1 = row.getCell(1);
@@ -489,13 +518,16 @@ export async function exportInventoryExcel(
     totalsRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
 
     if (totalCount > 0) {
-        totalsRow.getCell(8).value = { formula: `SUM(H4:H${totalsRowNum - 1})` };
+        totalsRow.getCell(8).value = { formula: `SUM(H4:H${totalsRowNum - 1})`, result: sumQty };
         totalsRow.getCell(8).numFmt = '#,##0';
         totalsRow.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
 
-        totalsRow.getCell(9).value = { formula: `SUM(I4:I${totalsRowNum - 1})` };
+        totalsRow.getCell(9).value = { formula: `SUM(I4:I${totalsRowNum - 1})`, result: sumValuation };
         totalsRow.getCell(9).numFmt = '#,##0.00';
         totalsRow.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
+    } else {
+        totalsRow.getCell(8).value = 0;
+        totalsRow.getCell(9).value = 0;
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -520,7 +552,7 @@ export function exportSalesPurchaseCSV(
     vatPercentage: number = 12,
     filenamePrefix: string = 'sales_purchase_report'
 ) {
-    const title = `${companyName.toUpperCase()} SALES & PURCHASE`;
+    const title = `${companyName.toUpperCase()} STORE SALES & PURCHASE`;
     const vatHeader = `${vatPercentage}% VAT`;
 
     const headers = [
@@ -537,6 +569,7 @@ export function exportSalesPurchaseCSV(
         'NET PROFIT',
     ];
 
+    let sumQty = 0;
     let sumTotalPurchase = 0;
     let sumGrossAmount = 0;
     let sumVatAdjusted = 0;
@@ -545,13 +578,15 @@ export function exportSalesPurchaseCSV(
     const rows = purchases.map((item) => {
         const qty = Number(item.quantity) || 0;
         const purchasePrice = Number(item.purchase_price) || 0;
-        const totalPurchase = Number(item.total_purchase) || qty * purchasePrice;
         const dealingPrice = Number(item.dealing_price) || 0;
+        const totalPurchase = Number(item.total_purchase) || (qty * purchasePrice);
         const discount = Number(item.discount) || (dealingPrice - purchasePrice);
-        const grossAmount = Number(item.gross_amount) || qty * dealingPrice;
-        const vatAmount = Number(item.vat_adjusted_amount) || (grossAmount * (1 - (vatPercentage / 100)));
+        const grossAmount = Number(item.gross_amount) || (qty * dealingPrice);
+        const vatMultiplier = (1 - (vatPercentage / 100));
+        const vatAmount = Number(item.vat_adjusted_amount) || (grossAmount * vatMultiplier);
         const netProfit = Number(item.net_profit) || (grossAmount - totalPurchase);
 
+        sumQty += qty;
         sumTotalPurchase += totalPurchase;
         sumGrossAmount += grossAmount;
         sumVatAdjusted += vatAmount;
@@ -578,7 +613,14 @@ export function exportSalesPurchaseCSV(
         headers.map((h) => `"${h}"`).join(','),
         ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')),
         `"","","","","","","","","","",""`,
-        `"","","","","TOTALS:","${sumTotalPurchase.toFixed(2)}","","","${sumGrossAmount.toFixed(2)}","${sumVatAdjusted.toFixed(2)}","${sumNetProfit.toFixed(2)}"`,
+        `"","TOTALS:","${sumQty}","","","${sumTotalPurchase.toFixed(2)}","","","${sumGrossAmount.toFixed(2)}","${sumVatAdjusted.toFixed(2)}","${sumNetProfit.toFixed(2)}"`,
+        `"","","","","","","","","","",""`,
+        `"SUMMARY STATISTICS:","","","","","","","","","",""`,
+        `"Total Items / Quantity","${sumQty}","","","","","","","","",""`,
+        `"Total Purchase Cost (PHP)","${sumTotalPurchase.toFixed(2)}","","","","","","","","",""`,
+        `"Total Gross Sales (PHP)","${sumGrossAmount.toFixed(2)}","","","","","","","","",""`,
+        `"Total ${vatPercentage}% VAT (PHP)","${sumVatAdjusted.toFixed(2)}","","","","","","","","",""`,
+        `"Total Net Profit (PHP)","${sumNetProfit.toFixed(2)}","","","","","","","","",""`,
     ];
 
     const csvContent = csvLines.join('\r\n');
@@ -591,6 +633,7 @@ export function exportSalesPurchaseCSV(
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
 /**
@@ -646,6 +689,11 @@ export function exportInventoryCSV(
         ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')),
         `"","","","","","","","",""`,
         `"","","","","TOTALS:","","","${sumQty}","${sumValuation.toFixed(2)}"`,
+        `"","","","","","","","",""`,
+        `"SUMMARY STATISTICS:","","","","","","","",""`,
+        `"Total Products Listed","${inventories.length}","","","","","","",""`,
+        `"Total Units In Stock","${sumQty}","","","","","","",""`,
+        `"Total Inventory Valuation (PHP)","${sumValuation.toFixed(2)}","","","","","","",""`,
     ];
 
     const csvContent = csvLines.join('\r\n');

@@ -16,7 +16,17 @@ class PurchaseController extends Controller
     public function index(Request $request)
     {
         $distributorParam = $request->query('distributor_id');
-        $distributorIdsParam = $request->query('distributor_ids');
+        if ($request->has('distributor_ids') && !$request->has('distributor_id')) {
+            $rawIds = $request->query('distributor_ids');
+            $idsArr = is_array($rawIds) ? $rawIds : explode(',', (string) $rawIds);
+            $cleanIds = implode(',', array_values(array_filter(array_map('intval', $idsArr))));
+            $queryParams = $request->except('distributor_ids');
+            if (!empty($cleanIds)) {
+                $queryParams['distributor_id'] = $cleanIds;
+            }
+            return redirect()->route('sales-purchase.index', $queryParams);
+        }
+
         $search = $request->query('search', '');
         $dateFilter = $request->query('date', '');
         $startDate = $request->query('start_date', '');
@@ -39,17 +49,12 @@ class PurchaseController extends Controller
         if ($distributorParam === 'all') {
             $isAllDistributors = true;
             $selectedDistributorIds = $allDistributors->pluck('id')->toArray();
-        } elseif (!empty($distributorIdsParam)) {
-            if (is_array($distributorIdsParam)) {
-                $selectedDistributorIds = array_values(array_map('intval', $distributorIdsParam));
-            } else {
-                $selectedDistributorIds = array_values(array_map('intval', explode(',', $distributorIdsParam)));
-            }
-        } elseif (!empty($distributorParam)) {
+        } elseif ($distributorParam !== null && $distributorParam !== '') {
             if (str_contains($distributorParam, ',')) {
-                $selectedDistributorIds = array_values(array_map('intval', explode(',', $distributorParam)));
+                $selectedDistributorIds = array_values(array_filter(array_map('intval', explode(',', $distributorParam))));
             } else {
-                $selectedDistributorIds = [(int) $distributorParam];
+                $val = (int) $distributorParam;
+                $selectedDistributorIds = $val > 0 ? [$val] : [];
             }
         }
 
@@ -147,7 +152,6 @@ class PurchaseController extends Controller
                 'end_date' => $endDate,
                 'month' => $monthFilter,
                 'distributor_id' => $distributorParam,
-                'distributor_ids' => $selectedDistributorIds,
             ],
         ]);
     }

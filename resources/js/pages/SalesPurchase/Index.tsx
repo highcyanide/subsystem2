@@ -237,7 +237,13 @@ export default function SalesPurchaseIndex({
 
     // Open Custom Distributor Selection Modal
     const openDistributorModal = () => {
-        setTempDistributorIds(selectedDistributorIds.length > 0 ? [...selectedDistributorIds] : allDistributors.map(d => d.id));
+        if (isAllDistributors) {
+            setTempDistributorIds(allDistributors.map(d => d.id));
+        } else if (selectedDistributorIds.length > 0) {
+            setTempDistributorIds([...selectedDistributorIds]);
+        } else {
+            setTempDistributorIds([]);
+        }
         setDistributorModalSearch('');
         setIsDistributorModalOpen(true);
     };
@@ -260,35 +266,49 @@ export default function SalesPurchaseIndex({
 
     const applyDistributorSelection = () => {
         setIsDistributorModalOpen(false);
+        const nextQuery: Record<string, string> = {};
+        if (filters.search) nextQuery.search = filters.search;
+        if (filters.date) nextQuery.date = filters.date;
+        if (filters.start_date) nextQuery.start_date = filters.start_date;
+        if (filters.end_date) nextQuery.end_date = filters.end_date;
+        if (filters.month) nextQuery.month = filters.month;
+
         if (tempDistributorIds.length === 0) {
-            router.get('/sales-purchase');
+            router.get('/sales-purchase', nextQuery);
         } else if (tempDistributorIds.length === allDistributors.length) {
-            router.get('/sales-purchase', {
-                ...filters,
-                distributor_id: 'all',
-            }, { preserveState: true });
-        } else if (tempDistributorIds.length === 1) {
-            router.get('/sales-purchase', {
-                ...filters,
-                distributor_id: tempDistributorIds[0].toString(),
-            }, { preserveState: true });
+            nextQuery.distributor_id = 'all';
+            router.get('/sales-purchase', nextQuery);
         } else {
-            router.get('/sales-purchase', {
-                ...filters,
-                distributor_id: tempDistributorIds.join(','),
-            }, { preserveState: true });
+            nextQuery.distributor_id = tempDistributorIds.join(',');
+            router.get('/sales-purchase', nextQuery);
         }
     };
 
     const removeDistributorChip = (idToRemove: number) => {
-        const nextIds = selectedDistributorIds.filter(id => id !== idToRemove);
+        const nextIds = selectedDistributorIds.filter(id => Number(id) !== Number(idToRemove));
+        const nextQuery: Record<string, string> = {};
+        if (filters.search) nextQuery.search = filters.search;
+        if (filters.date) nextQuery.date = filters.date;
+        if (filters.start_date) nextQuery.start_date = filters.start_date;
+        if (filters.end_date) nextQuery.end_date = filters.end_date;
+        if (filters.month) nextQuery.month = filters.month;
+
         if (nextIds.length === 0) {
-            router.get('/sales-purchase');
-        } else if (nextIds.length === allDistributors.length) {
-            router.get('/sales-purchase', { ...filters, distributor_id: 'all' });
+            router.get('/sales-purchase', nextQuery);
         } else {
-            router.get('/sales-purchase', { ...filters, distributor_id: nextIds.join(',') });
+            nextQuery.distributor_id = nextIds.join(',');
+            router.get('/sales-purchase', nextQuery);
         }
+    };
+
+    const clearAllDistributors = () => {
+        const nextQuery: Record<string, string> = {};
+        if (filters.search) nextQuery.search = filters.search;
+        if (filters.date) nextQuery.date = filters.date;
+        if (filters.start_date) nextQuery.start_date = filters.start_date;
+        if (filters.end_date) nextQuery.end_date = filters.end_date;
+        if (filters.month) nextQuery.month = filters.month;
+        router.get('/sales-purchase', nextQuery);
     };
 
     const getProviderBannerLabel = () => {
@@ -788,7 +808,7 @@ export default function SalesPurchaseIndex({
                                     </span>
                                 </div>
                                 <p className="text-xs text-slate-300 mt-1">
-                                    Display sales & purchases for <strong>ALL Distributors</strong> combined, or customize who to display (e.g. choose Pepsi and Coca-Cola Bottlers).
+                                    Display sales & purchases for <strong>ALL Distributors</strong> combined, or customize specific distributors to view together.
                                 </p>
                             </div>
                         </div>
@@ -1000,26 +1020,33 @@ export default function SalesPurchaseIndex({
                             </span>
 
                             {isAllDistributors ? (
-                                <span className="inline-flex items-center space-x-1 px-3 py-1 bg-emerald-950 text-emerald-300 border border-emerald-600/60 rounded-full text-xs font-bold">
+                                <span className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-950 text-emerald-300 border border-emerald-600/60 rounded-full text-xs font-bold shadow-sm">
                                     <Layers className="h-3.5 w-3.5 text-emerald-400" />
                                     <span>ALL Distributors ({allDistributors.length})</span>
+                                    <button
+                                        type="button"
+                                        onClick={clearAllDistributors}
+                                        className="hover:text-rose-400 text-emerald-400/80 transition ml-1 p-0.5 rounded-full hover:bg-slate-800"
+                                        title="Clear All Distributors Filter"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
                                 </span>
                             ) : (
                                 selectedDistributors.map(d => (
                                     <span
                                         key={d.id}
-                                        className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-950/80 text-emerald-200 border border-emerald-700/60 rounded-full text-xs font-semibold"
+                                        className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-950/80 text-emerald-200 border border-emerald-700/60 rounded-full text-xs font-semibold shadow-sm"
                                     >
                                         <span>{d.name}</span>
-                                        {selectedDistributors.length > 1 && (
-                                            <button
-                                                onClick={() => removeDistributorChip(d.id)}
-                                                className="hover:text-rose-400 transition"
-                                                title={`Remove ${d.name}`}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeDistributorChip(d.id)}
+                                            className="hover:text-rose-400 text-slate-400 transition ml-0.5 p-0.5 rounded-full hover:bg-slate-800"
+                                            title={`Remove ${d.name}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
                                     </span>
                                 ))
                             )}
@@ -1035,7 +1062,17 @@ export default function SalesPurchaseIndex({
 
                         {!isAllDistributors && (
                             <button
-                                onClick={() => router.get('/sales-purchase', { ...filters, distributor_id: 'all' })}
+                                type="button"
+                                onClick={() => {
+                                    const nextQuery: Record<string, string> = {};
+                                    if (filters.search) nextQuery.search = filters.search;
+                                    if (filters.date) nextQuery.date = filters.date;
+                                    if (filters.start_date) nextQuery.start_date = filters.start_date;
+                                    if (filters.end_date) nextQuery.end_date = filters.end_date;
+                                    if (filters.month) nextQuery.month = filters.month;
+                                    nextQuery.distributor_id = 'all';
+                                    router.get('/sales-purchase', nextQuery);
+                                }}
                                 className="text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition"
                             >
                                 Switch to ALL Distributors
@@ -1142,12 +1179,9 @@ export default function SalesPurchaseIndex({
                     {/* SPREADSHEET CONTAINER WITH GREEN BANNER HEADER */}
                     <div className="bg-slate-900 border border-emerald-900/60 rounded-2xl overflow-hidden shadow-2xl">
 
-                        {/* GREEN BRANDED BANNER HEADER (WINZELLE SALES & PURCHASE) */}
-                        <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white font-black text-center py-3.5 tracking-widest uppercase text-sm sm:text-base border-b border-emerald-500/40 shadow-inner flex flex-wrap items-center justify-center gap-2">
-                            <span>WINZELLE SALES & PURCHASE</span>
-                            <span className="text-xs bg-emerald-900/80 px-3 py-0.5 rounded-full border border-emerald-400/40 font-normal">
-                                Provider: {getProviderBannerLabel()}
-                            </span>
+                        {/* GREEN BRANDED BANNER HEADER (WINZELLE STORE SALES & PURCHASE) */}
+                        <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white font-black text-center py-3.5 tracking-widest uppercase text-sm sm:text-base border-b border-emerald-500/40 shadow-inner flex items-center justify-center">
+                            <span>WINZELLE STORE SALES & PURCHASE</span>
                         </div>
 
                         {/* SPREADSHEET DATA TABLE */}
@@ -1248,9 +1282,13 @@ export default function SalesPurchaseIndex({
                                 {purchases.length > 0 && (
                                     <tfoot className="border-t-2 border-emerald-500 bg-slate-950 text-white font-mono font-bold text-[11px]">
                                         <tr>
-                                            <td colSpan={5} className="py-3 px-3 text-right font-sans uppercase tracking-wider text-slate-400 border-r border-slate-800">
-                                                Spreadsheet Totals:
+                                            <td colSpan={2} className="py-3 px-3 text-right font-sans uppercase tracking-wider text-slate-400 border-r border-slate-800">
+                                                Totals:
                                             </td>
+                                            <td className="py-3 px-3 text-right text-emerald-400 border-r border-slate-800 bg-slate-900/80">
+                                                {summary.total_items.toLocaleString()}
+                                            </td>
+                                            <td colSpan={2} className="border-r border-slate-800 bg-slate-900/40"></td>
                                             <td className="py-3 px-3 text-right text-white border-r border-slate-800 bg-slate-900/80">
                                                 ₱{formatCurrency(summary.total_purchase)}
                                             </td>
@@ -1302,7 +1340,7 @@ export default function SalesPurchaseIndex({
                         </div>
 
                         <p className="text-xs text-slate-400 mb-4">
-                            Select specific distributors to display their sales & purchase transactions together (for example: choose Pepsi and Coca-Cola Bottlers, or select All).
+                            Select specific distributors to display their sales & purchase transactions together, or click Clear All to pick new ones.
                         </p>
 
                         {/* Quick Actions */}
