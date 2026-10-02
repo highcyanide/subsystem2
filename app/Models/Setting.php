@@ -14,10 +14,12 @@ class Setting extends Model
      */
     public static function getValue(string $key, mixed $default = null): mixed
     {
-        return Cache::remember("setting.{$key}", 300, function () use ($key, $default) {
+        try {
             $setting = self::where('key', $key)->first();
             return $setting ? $setting->value : $default;
-        });
+        } catch (\Throwable $e) {
+            return $default;
+        }
     }
 
     /**
@@ -29,7 +31,9 @@ class Setting extends Model
             ['key' => $key],
             ['value' => (string) $value]
         );
-        Cache::forget("setting.{$key}");
+        try {
+            Cache::forget("setting.{$key}");
+        } catch (\Throwable $e) {}
     }
 
     /**

@@ -3,6 +3,10 @@ import { Head, router, Link, usePage } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
 import ConfirmModal from '@/Components/ConfirmModal';
 import { downloadCSV } from '@/utils/exportCsv';
+import { exportSalesPurchaseExcel, exportSalesPurchaseCSV } from '@/utils/exportTemplateExcel';
+import { useTablePaginationAndSort } from '@/hooks/useTablePaginationAndSort';
+import TablePagination from '@/Components/TablePagination';
+import SortableHeader from '@/Components/SortableHeader';
 import {
     Search,
     Star,
@@ -25,7 +29,10 @@ import {
     ChevronDown,
     CheckSquare,
     Square,
-    Download
+    Download,
+    FileSpreadsheet,
+    Loader2,
+    TrendingUp
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -76,6 +83,7 @@ interface Distributor {
     contact_number: string;
     email?: string;
     address?: string;
+    logo?: string;
     is_favorite: boolean;
     products_count?: number;
 }
@@ -171,6 +179,26 @@ export default function SalesPurchaseIndex({
     const [selectedDate, setSelectedDate] = useState(filters.date || '');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Sorting & Pagination for Purchases Spreadsheet
+    const {
+        sortedData,
+        paginatedData,
+        sortConfig,
+        requestSort,
+        currentPage,
+        pageSize,
+        totalPages,
+        totalItems,
+        setPage,
+        setPageSize,
+    } = useTablePaginationAndSort({
+        data: purchases,
+        defaultSortKey: 'date',
+        defaultDirection: 'desc',
+        defaultPageSize: 15,
+    });
 
     // Distributor Multi-Select Filter Modal State
     const [isDistributorModalOpen, setIsDistributorModalOpen] = useState(false);
@@ -573,8 +601,9 @@ export default function SalesPurchaseIndex({
 
     const handleSubmitPurchase = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formDistributorId || !formProductId) return;
+        if (!formDistributorId || !formProductId || isSubmitting) return;
 
+        setIsSubmitting(true);
         const payload = {
             date: formDate,
             distributor_id: formDistributorId,
@@ -587,15 +616,25 @@ export default function SalesPurchaseIndex({
 
         if (editingPurchase) {
             router.put(`/sales-purchase/${editingPurchase.id}`, payload, {
+                preserveScroll: true,
+                preserveState: true,
                 onSuccess: () => {
                     setIsAddModalOpen(false);
                     setEditingPurchase(null);
+                },
+                onFinish: () => {
+                    setIsSubmitting(false);
                 }
             });
         } else {
             router.post('/sales-purchase', payload, {
+                preserveScroll: true,
+                preserveState: true,
                 onSuccess: () => {
                     setIsAddModalOpen(false);
+                },
+                onFinish: () => {
+                    setIsSubmitting(false);
                 }
             });
         }
@@ -619,39 +658,46 @@ export default function SalesPurchaseIndex({
         });
     };
 
+    const handleExportExcel = () => {
+        const companyName = settings?.company_name || 'WINZELLE';
+        const exportData = sortedData.map(item => ({
+            date: item.date,
+            provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
+            quantity: Number(item.quantity) || 0,
+            product_name: item.product?.name || 'Item',
+            purchase_price: Number(item.purchase_price) || 0,
+            total_purchase: Number(item.total_purchase) || 0,
+            dealing_price: Number(item.dealing_price) || 0,
+            discount: Number(item.discount) || 0,
+            gross_amount: Number(item.gross_amount) || 0,
+            vat_percentage: Number(item.vat_percentage) || defaultVatPercentage,
+            vat_adjusted_amount: Number(item.vat_adjusted_amount) || 0,
+            net_profit: Number(item.net_profit) || 0,
+        }));
+
+        const providerLabel = selectedDistributor ? selectedDistributor.name.replace(/\s+/g, '_') : 'all_distributors';
+        exportSalesPurchaseExcel(companyName, exportData, defaultVatPercentage, `sales_purchase_${providerLabel}`);
+    };
+
     const handleExportCSV = () => {
-        const headers = [
-            'Date',
-            'Provider / Distributor',
-            'Product Name',
-            'Quantity',
-            'Purchase Price (PHP)',
-            'Total Purchase (PHP)',
-            'Dealing Price (PHP)',
-            'Discount (PHP)',
-            'Gross Amount (PHP)',
-            'VAT Percentage',
-            'VAT Adjusted Amount (PHP)',
-            'Net Profit (PHP)'
-        ];
+        const companyName = settings?.company_name || 'WINZELLE';
+        const exportData = sortedData.map(item => ({
+            date: item.date,
+            provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
+            quantity: Number(item.quantity) || 0,
+            product_name: item.product?.name || 'Item',
+            purchase_price: Number(item.purchase_price) || 0,
+            total_purchase: Number(item.total_purchase) || 0,
+            dealing_price: Number(item.dealing_price) || 0,
+            discount: Number(item.discount) || 0,
+            gross_amount: Number(item.gross_amount) || 0,
+            vat_percentage: Number(item.vat_percentage) || defaultVatPercentage,
+            vat_adjusted_amount: Number(item.vat_adjusted_amount) || 0,
+            net_profit: Number(item.net_profit) || 0,
+        }));
 
-        const rows = purchases.map(item => [
-            item.date,
-            item.distributor?.name || selectedDistributor?.name || 'N/A',
-            item.product?.name || 'Item',
-            item.quantity,
-            item.purchase_price,
-            item.total_purchase,
-            item.dealing_price,
-            item.discount,
-            item.gross_amount,
-            `${item.vat_percentage}%`,
-            item.vat_adjusted_amount,
-            item.net_profit
-        ]);
-
-        const providerLabel = selectedDistributor ? selectedDistributor.name.replace(/\s+/g, '_') : 'All_Distributors';
-        downloadCSV(`winzelle_sales_purchases_${providerLabel}_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+        const providerLabel = selectedDistributor ? selectedDistributor.name.replace(/\s+/g, '_') : 'all_distributors';
+        exportSalesPurchaseCSV(companyName, exportData, defaultVatPercentage, `sales_purchase_${providerLabel}`);
     };
 
     // Live Math calculations for form preview
@@ -679,19 +725,15 @@ export default function SalesPurchaseIndex({
     };
 
     return (
-        <MainLayout title="Sales & Purchase Management">
-            <Head title="Subsystem 2: Sales & Purchase Module" />
+        <MainLayout title="Sales & Purchase">
+            <Head title="Sales & Purchase" />
 
-            {/* Header / Subsystem Navigation Banner */}
+            {/* Header */}
             <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                 <div>
-                    <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-                        <span>Subsystem 2</span>
-                        <span>•</span>
-                        <span>Module 3: Sales & Purchase Page</span>
-                    </div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
-                        <span>Distributor Sales & Purchase Portal</span>
+                        <TrendingUp className="h-7 w-7 text-emerald-400" />
+                        <span>Sales & Purchase</span>
                     </h1>
                 </div>
 
@@ -731,7 +773,7 @@ export default function SalesPurchaseIndex({
                 <div className="space-y-8 animate-fade-in">
 
                     {/* HERO CARD: ALL DISTRIBUTORS OPTION */}
-                    <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border-2 border-emerald-500/50 hover:border-emerald-400 p-6 rounded-2xl shadow-xl transition-all duration-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group">
+                    <div className="bg-slate-900 border-2 border-emerald-500/50 hover:border-emerald-400 p-6 rounded-2xl shadow-xl transition-all duration-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group">
                         <div className="flex items-center space-x-4">
                             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform shrink-0">
                                 <Layers className="h-7 w-7" />
@@ -819,41 +861,54 @@ export default function SalesPurchaseIndex({
                                 <p className="text-[11px] text-slate-500 mt-1">Click the star icon on any distributor below to pin it here for quick access.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
                                 {favorites.map((dist) => (
                                     <div
                                         key={dist.id}
                                         onClick={() => selectDistributorCard(dist.id)}
-                                        className="group relative bg-gradient-to-b from-slate-900 to-slate-950 hover:from-emerald-950/40 hover:to-slate-900 border border-amber-500/30 hover:border-emerald-500/60 p-5 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg hover:shadow-emerald-950/50 hover:-translate-y-1 flex flex-col justify-between"
+                                        className="group relative bg-slate-900 border border-amber-500/35 hover:border-amber-500/70 rounded-2xl p-5 shadow-lg hover:shadow-emerald-950/40 hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-between text-center cursor-pointer h-72 select-none"
                                     >
-                                        <div>
-                                            <div className="flex items-start justify-between gap-2 mb-3">
-                                                <div className="h-10 w-10 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
-                                                    {dist.name.charAt(0)}
-                                                </div>
-                                                <button
-                                                    onClick={(e) => toggleFavorite(e, dist.id)}
-                                                    title="Favorite toggle"
-                                                    className="p-1.5 text-amber-400 hover:scale-110 transition"
-                                                >
-                                                    <Star className="h-5 w-5 fill-amber-400" />
-                                                </button>
-                                            </div>
-
-                                            <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors line-clamp-1">
-                                                {dist.name}
-                                            </h3>
-                                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                                                <span>📞</span>
-                                                <span>{dist.contact_number}</span>
-                                            </p>
+                                        {/* Top row: Favorite indicator & Star button */}
+                                        <div className="w-full flex items-center justify-between">
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                                                <Star className="h-3 w-3 fill-amber-400" />
+                                                <span>Favorite</span>
+                                            </span>
+                                            <button
+                                                onClick={(e) => toggleFavorite(e, dist.id)}
+                                                className="p-1.5 text-amber-400 hover:scale-110 transition rounded-lg"
+                                                title="Unpin favorite"
+                                            >
+                                                <Star className="h-4 w-4 fill-amber-400" />
+                                            </button>
                                         </div>
 
-                                        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                                            <span className="text-[11px] text-slate-400 bg-slate-800/60 px-2 py-1 rounded-md border border-slate-700/50">
+                                        {/* Center: BIGGER LOGO & NAME */}
+                                        <div className="flex-1 flex flex-col items-center justify-center gap-3 w-full my-1">
+                                            <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl bg-white/5 border border-slate-700/60 p-2.5 shadow-inner flex items-center justify-center group-hover:scale-105 group-hover:border-amber-400/60 transition-all duration-300">
+                                                {dist.logo ? (
+                                                    <img
+                                                        src={dist.logo}
+                                                        alt={dist.name}
+                                                        className="h-full w-full object-contain"
+                                                    />
+                                                ) : (
+                                                    <div className="h-full w-full rounded-xl bg-gradient-to-br from-amber-500/20 to-emerald-950 text-amber-300 font-black text-3xl sm:text-4xl flex items-center justify-center border border-amber-500/40 shadow-md">
+                                                        {dist.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-2 px-1 text-center">
+                                                {dist.name}
+                                            </h3>
+                                        </div>
+
+                                        {/* Bottom row: Product count and CTA */}
+                                        <div className="w-full pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                                            <span className="text-[11px] text-slate-400 font-mono bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50">
                                                 {dist.products_count || 0} Products
                                             </span>
-                                            <span className="text-xs font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                                            <span className="text-[11px] font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
                                                 Manage Purchases &rarr;
                                             </span>
                                         </div>
@@ -876,40 +931,53 @@ export default function SalesPurchaseIndex({
                                 All available distributors are in your Favorites list above!
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
                                 {others.map((dist) => (
                                     <div
                                         key={dist.id}
                                         onClick={() => selectDistributorCard(dist.id)}
-                                        className="group bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 p-5 rounded-2xl cursor-pointer transition-all duration-300 shadow-md hover:-translate-y-0.5 flex flex-col justify-between"
+                                        className="group relative bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-5 shadow-lg hover:shadow-emerald-950/40 hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-between text-center cursor-pointer h-72 select-none"
                                     >
-                                        <div>
-                                            <div className="flex items-start justify-between gap-2 mb-3">
-                                                <div className="h-9 w-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-sm group-hover:bg-emerald-900 group-hover:text-emerald-200 transition-colors">
-                                                    {dist.name.charAt(0)}
-                                                </div>
-                                                <button
-                                                    onClick={(e) => toggleFavorite(e, dist.id)}
-                                                    title="Mark as favorite"
-                                                    className="p-1.5 text-slate-600 hover:text-amber-400 hover:scale-110 transition"
-                                                >
-                                                    <Star className="h-4 w-4" />
-                                                </button>
-                                            </div>
-
-                                            <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-300 transition-colors line-clamp-1">
-                                                {dist.name}
-                                            </h3>
-                                            <p className="text-xs text-slate-400 mt-1">
-                                                {dist.contact_number}
-                                            </p>
+                                        {/* Top row: Status indicator & Star button */}
+                                        <div className="w-full flex items-center justify-between">
+                                            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+                                                Distributor
+                                            </span>
+                                            <button
+                                                onClick={(e) => toggleFavorite(e, dist.id)}
+                                                className="p-1.5 text-slate-500 hover:text-amber-400 hover:scale-110 transition rounded-lg"
+                                                title="Mark as favorite"
+                                            >
+                                                <Star className="h-4 w-4" />
+                                            </button>
                                         </div>
 
-                                        <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-                                            <span className="text-[11px] text-slate-500">
+                                        {/* Center: BIGGER LOGO & NAME */}
+                                        <div className="flex-1 flex flex-col items-center justify-center gap-3 w-full my-1">
+                                            <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl bg-white/5 border border-slate-700/60 p-2.5 shadow-inner flex items-center justify-center group-hover:scale-105 group-hover:border-emerald-400/60 transition-all duration-300">
+                                                {dist.logo ? (
+                                                    <img
+                                                        src={dist.logo}
+                                                        alt={dist.name}
+                                                        className="h-full w-full object-contain"
+                                                    />
+                                                ) : (
+                                                    <div className="h-full w-full rounded-xl bg-slate-800 text-slate-300 font-bold text-3xl sm:text-4xl flex items-center justify-center border border-slate-700 shadow-md">
+                                                        {dist.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-2 px-1 text-center">
+                                                {dist.name}
+                                            </h3>
+                                        </div>
+
+                                        {/* Bottom row: Product count and CTA */}
+                                        <div className="w-full pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                                            <span className="text-[11px] text-slate-400 font-mono bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50">
                                                 {dist.products_count || 0} Products
                                             </span>
-                                            <span className="text-xs font-medium text-emerald-400 group-hover:translate-x-1 transition-transform">
+                                            <span className="text-[11px] font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
                                                 Select &rarr;
                                             </span>
                                         </div>
@@ -1036,22 +1104,33 @@ export default function SalesPurchaseIndex({
                             )}
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto justify-end">
+                            <button
+                                type="button"
+                                onClick={handleExportExcel}
+                                disabled={purchases.length === 0}
+                                className="inline-flex items-center space-x-2 px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-semibold text-xs rounded-xl transition border border-emerald-500/40 shadow-sm"
+                                title="Export formatted spreadsheet to Excel (.xlsx) matching template"
+                            >
+                                <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                                <span>Export Excel</span>
+                            </button>
+
                             <button
                                 type="button"
                                 onClick={handleExportCSV}
                                 disabled={purchases.length === 0}
-                                className="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-semibold text-xs rounded-lg transition border border-slate-700 shadow-sm"
-                                title="Export currently filtered spreadsheet to CSV"
+                                className="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-semibold text-xs rounded-xl transition border border-slate-700 shadow-sm"
+                                title="Export currently filtered spreadsheet to CSV matching template"
                             >
-                                <Download className="h-4 w-4 text-emerald-400" />
+                                <Download className="h-4 w-4 text-slate-400" />
                                 <span>Export CSV</span>
                             </button>
 
                             {canManage && (
                                 <button
                                     onClick={openAddModal}
-                                    className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs rounded-lg shadow-md shadow-emerald-950/50 transition border border-emerald-400/30"
+                                    className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs rounded-xl shadow-md shadow-emerald-950/50 transition border border-emerald-400/30"
                                 >
                                     <Plus className="h-4 w-4" />
                                     <span>Add Purchase Transaction</span>
@@ -1077,29 +1156,29 @@ export default function SalesPurchaseIndex({
                                 <thead>
                                     {/* Table Header */}
                                     <tr className="bg-emerald-800 text-emerald-50 uppercase tracking-wider font-bold border-b border-emerald-600 text-[11px]">
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 whitespace-nowrap">DATE</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 whitespace-nowrap">PROVIDER</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">QUANTITY</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 whitespace-nowrap">PRODUCT NAME</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">PURCHASE PRICE</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">TOTAL PURCHASE</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">DEALING PRICE</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">DISCOUNT</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap">GROSS AMOUNT</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap bg-emerald-900/80">{defaultVatPercentage}% VAT</th>
-                                        <th className="py-3 px-3 border-r border-emerald-700/60 text-right whitespace-nowrap bg-emerald-950 text-emerald-300">NET PROFIT</th>
+                                        <SortableHeader label="DATE" sortKey="date" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PROVIDER" sortKey="distributor.name" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="QUANTITY" sortKey="quantity" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PRODUCT NAME" sortKey="product.name" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PURCHASE PRICE" sortKey="purchase_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="TOTAL PURCHASE" sortKey="total_purchase" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="DEALING PRICE" sortKey="dealing_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="DISCOUNT" sortKey="discount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="GROSS AMOUNT" sortKey="gross_amount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label={`${defaultVatPercentage}% VAT`} sortKey="vat_adjusted_amount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-900/90 hover:bg-emerald-900 text-teal-100" />
+                                        <SortableHeader label="NET PROFIT" sortKey="net_profit" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-950 text-emerald-300 hover:bg-emerald-900" />
                                         <th className="py-3 px-2 text-center whitespace-nowrap">ACTIONS</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/80 bg-slate-950 font-mono text-[11px]">
-                                    {purchases.length === 0 ? (
+                                    {paginatedData.length === 0 ? (
                                         <tr>
                                             <td colSpan={12} className="py-12 text-center text-slate-500 font-sans">
                                                 No purchase records found for the selected distributor filter. Click <strong className="text-emerald-400">"Add Purchase Transaction"</strong> above to record a purchase.
                                             </td>
                                         </tr>
                                     ) : (
-                                        purchases.map((item, idx) => (
+                                        paginatedData.map((item, idx) => (
                                             <tr
                                                 key={item.id}
                                                 className={`hover:bg-slate-900/90 transition-colors ${idx % 2 === 0 ? 'bg-slate-950' : 'bg-slate-900/40'
@@ -1165,8 +1244,42 @@ export default function SalesPurchaseIndex({
                                         ))
                                     )}
                                 </tbody>
+                                {/* Template Excel Totals Row in Table Footer */}
+                                {purchases.length > 0 && (
+                                    <tfoot className="border-t-2 border-emerald-500 bg-slate-950 text-white font-mono font-bold text-[11px]">
+                                        <tr>
+                                            <td colSpan={5} className="py-3 px-3 text-right font-sans uppercase tracking-wider text-slate-400 border-r border-slate-800">
+                                                Spreadsheet Totals:
+                                            </td>
+                                            <td className="py-3 px-3 text-right text-white border-r border-slate-800 bg-slate-900/80">
+                                                ₱{formatCurrency(summary.total_purchase)}
+                                            </td>
+                                            <td colSpan={2} className="border-r border-slate-800 bg-slate-900/40"></td>
+                                            <td className="py-3 px-3 text-right text-emerald-400 border-r border-slate-800 bg-emerald-950/30">
+                                                ₱{formatCurrency(summary.gross_amount)}
+                                            </td>
+                                            <td className="py-3 px-3 text-right text-teal-300 border-r border-slate-800 bg-teal-950/30">
+                                                ₱{formatCurrency(summary.vat_adjusted_amount)}
+                                            </td>
+                                            <td className="py-3 px-3 text-right text-emerald-400 border-r border-slate-800 bg-emerald-950/50">
+                                                ₱{formatCurrency(summary.net_profit)}
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
+
+                        {/* Pagination Bar */}
+                        <TablePagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            pageSize={pageSize}
+                            totalItems={totalItems}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </div>
                 </div>
             )}
@@ -1454,11 +1567,11 @@ export default function SalesPurchaseIndex({
                                 </div>
                             </div>
 
-                            {/* Subsystem Sync Notice */}
+                            {/* Auto Sync Notice */}
                             <div className="text-[11px] text-emerald-300/80 bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-900/50 flex items-start gap-2">
                                 <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                                 <span>
-                                    Saving will automatically record stock items into <strong>Subsystem 1: Module 1 (Inventory Management System)</strong>.
+                                    Saving will automatically increment stock quantities in <strong>Inventory</strong>.
                                 </span>
                             </div>
 
@@ -1467,16 +1580,17 @@ export default function SalesPurchaseIndex({
                                 <button
                                     type="button"
                                     onClick={() => setIsAddModalOpen(false)}
-                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg"
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={availableProductsForForm.length === 0}
-                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md"
+                                    disabled={isSubmitting || availableProductsForForm.length === 0}
+                                    className="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md border border-emerald-400/30 transition"
                                 >
-                                    {editingPurchase ? 'Save Changes' : 'Save & Sync Inventory'}
+                                    {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                    <span>{isSubmitting ? 'Saving Transaction...' : editingPurchase ? 'Save Changes' : 'Save & Sync Inventory'}</span>
                                 </button>
                             </div>
                         </form>
@@ -1832,7 +1946,7 @@ export default function SalesPurchaseIndex({
             <ConfirmModal
                 isOpen={deleteModalOpen}
                 title="Delete Purchase Record"
-                message="Are you sure you want to permanently delete this purchase transaction? The inventory stock quantity in Subsystem 1 will be automatically adjusted to maintain balance."
+                message="Are you sure you want to delete this purchase transaction? The inventory stock quantity will be automatically adjusted."
                 confirmText="Yes, Delete Record"
                 isLoading={isDeleting}
                 onConfirm={handleExecuteDelete}

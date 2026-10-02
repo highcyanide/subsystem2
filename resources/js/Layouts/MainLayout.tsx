@@ -16,15 +16,33 @@ import {
     History,
     ChevronDown,
     X,
-    Check
+    Check,
+    Sun,
+    Moon,
+    ExternalLink,
+    Clock,
+    UserCheck,
+    Info,
+    AlertTriangle,
+    Save,
+    BookOpen,
+    Upload,
+    Camera,
+    Trash2,
+    HelpCircle
 } from 'lucide-react';
 
 interface NotificationItem {
     id: number;
+    actor_id?: number | null;
+    actor_name?: string | null;
+    actor_role?: string | null;
+    actor_avatar?: string | null;
     type: string;
     title: string;
     message: string;
-    link?: string;
+    details?: string | null;
+    link?: string | null;
     is_read: boolean;
     created_at: string;
 }
@@ -47,6 +65,53 @@ export default function MainLayout({ children, title }: Props) {
 
     const [showNotifications, setShowNotifications] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [profileName, setProfileName] = useState(auth?.user?.name || '');
+    const [profileUsername, setProfileUsername] = useState(auth?.user?.username || '');
+    const [profileEmail, setProfileEmail] = useState(auth?.user?.email || '');
+    const [profileAvatar, setProfileAvatar] = useState(auth?.user?.avatar || '');
+    const [profilePassword, setProfilePassword] = useState('');
+    const [profileProcessing, setProfileProcessing] = useState(false);
+    const [profileError, setProfileError] = useState('');
+
+    useEffect(() => {
+        if (auth?.user) {
+            setProfileName(auth.user.name || '');
+            setProfileUsername(auth.user.username || '');
+            setProfileEmail(auth.user.email || '');
+            setProfileAvatar(auth.user.avatar || '');
+        }
+    }, [auth?.user?.name, auth?.user?.username, auth?.user?.email, auth?.user?.avatar]);
+
+    // Theme state
+    const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
+        const prefersLight = document.documentElement.classList.contains('theme-light') || savedTheme === 'light';
+        const activeTheme = prefersLight ? 'light' : 'dark';
+        setTheme(activeTheme);
+        applyTheme(activeTheme);
+    }, []);
+
+    const applyTheme = (newTheme: 'dark' | 'light') => {
+        if (newTheme === 'light') {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('theme-light');
+        } else {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('theme-light');
+        }
+    };
+
+    const toggleTheme = () => {
+        const next = theme === 'dark' ? 'light' : 'dark';
+        setTheme(next);
+        localStorage.setItem('theme', next);
+        applyTheme(next);
+    };
+
     const notifRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -64,24 +129,93 @@ export default function MainLayout({ children, title }: Props) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Periodic live background poll to keep notifications up-to-date across multiple users
+    // Real-time dynamic background synchronization across all pages, tabs, and users
     useEffect(() => {
         if (!auth?.user) return;
-        const interval = setInterval(() => {
+
+        const performDynamicSync = () => {
+            // Avoid background reload while user is actively typing in an input, textarea, or selecting options
+            const activeEl = document.activeElement;
+            const activeTag = activeEl?.tagName?.toLowerCase();
+            if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+                return;
+            }
+            // Avoid background reload if ANY interactive modal or menu is open
+            if (
+                isProfileOpen ||
+                selectedNotif ||
+                showNotifications ||
+                showUserMenu ||
+                document.querySelector('.fixed.z-50') ||
+                document.querySelector('[role="dialog"]')
+            ) {
+                return;
+            }
+
             router.reload({
-                only: ['notifications'],
                 preserveState: true,
                 preserveScroll: true,
             });
-        }, 15000);
-        return () => clearInterval(interval);
-    }, [auth?.user?.id]);
+        };
+
+        // Live periodic poll every 4 seconds for instant cross-user dynamic updates
+        const interval = setInterval(performDynamicSync, 4000);
+
+        // Immediate dynamic sync when window/tab regains focus
+        const handleWindowFocus = () => {
+            performDynamicSync();
+        };
+        window.addEventListener('focus', handleWindowFocus);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('focus', handleWindowFocus);
+        };
+    }, [auth?.user?.id, isProfileOpen, selectedNotif, showNotifications, showUserMenu]);
+
+    const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_DIM = 256;
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > MAX_DIM) {
+                        height = Math.round((height * MAX_DIM) / width);
+                        width = MAX_DIM;
+                    }
+                } else {
+                    if (height > MAX_DIM) {
+                        width = Math.round((width * MAX_DIM) / height);
+                        height = MAX_DIM;
+                    }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const webpData = canvas.toDataURL('image/webp', 0.88);
+                    setProfileAvatar(webpData);
+                } else {
+                    setProfileAvatar(event.target?.result as string);
+                }
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    };
 
     const handleMarkAllRead = () => {
         router.post('/notifications/read-all', {}, {
             preserveState: true,
             preserveScroll: true,
-            onSuccess: () => {},
         });
     };
 
@@ -89,14 +223,37 @@ export default function MainLayout({ children, title }: Props) {
         if (!notif.is_read) {
             router.post(`/notifications/${notif.id}/read`, {}, { preserveState: true, preserveScroll: true });
         }
-        if (notif.link) {
-            router.visit(notif.link);
-        }
+        setSelectedNotif(notif);
         setShowNotifications(false);
     };
 
     const handleLogout = () => {
         router.post('/logout');
+    };
+
+    const handleSaveProfile = (e: React.FormEvent) => {
+        e.preventDefault();
+        setProfileProcessing(true);
+        setProfileError('');
+
+        router.put('/profile', {
+            name: profileName,
+            username: profileUsername || undefined,
+            email: profileEmail,
+            avatar: profileAvatar || null,
+            password: profilePassword || undefined,
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                setIsProfileOpen(false);
+                setProfilePassword('');
+            },
+            onError: (errs) => {
+                setProfileError(Object.values(errs)[0] as string || 'Failed to update profile');
+            },
+            onFinish: () => setProfileProcessing(false),
+        });
     };
 
     const roleColors: Record<string, string> = {
@@ -108,28 +265,28 @@ export default function MainLayout({ children, title }: Props) {
     const navItems = [
         {
             name: 'Sales & Purchase',
-            subtitle: 'Module 3: Transactions & Cards',
+            shortName: 'Sales & Purchase',
             href: '/sales-purchase',
             icon: TrendingUp,
             active: url.startsWith('/sales-purchase') || url === '/',
         },
         {
             name: 'Inventory',
-            subtitle: 'Module 1: Live Stock Table',
+            shortName: 'Inventory',
             href: '/inventory',
             icon: Boxes,
             active: url.startsWith('/inventory'),
         },
         {
             name: 'Distributors',
-            subtitle: 'Module 1: Add Distributors',
+            shortName: 'Distributors',
             href: '/distributors',
             icon: Truck,
             active: url.startsWith('/distributors'),
         },
         {
             name: 'Products',
-            subtitle: 'Module 2: Add & Update Items',
+            shortName: 'Products',
             href: '/products',
             icon: PackagePlus,
             active: url.startsWith('/products'),
@@ -149,50 +306,73 @@ export default function MainLayout({ children, title }: Props) {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
             {/* Top Bar Navigation */}
-            <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-emerald-900/40 shadow-xl">
+            <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-md">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
+                    <div className="flex items-center justify-between h-15 gap-4">
 
-                        {/* Logo & Title */}
-                        <div className="flex items-center space-x-3">
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 flex items-center justify-center shadow-lg shadow-emerald-900/30 border border-emerald-400/30">
-                                <Store className="h-5 w-5 text-white" />
+                        {/* Minimalist Brand Logo & Title */}
+                        <Link href="/" className="flex items-center space-x-2.5 group shrink-0" title={`${companyName} Store`}>
+                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 flex items-center justify-center shadow-md shadow-emerald-900/20 border border-emerald-400/30 group-hover:scale-105 transition">
+                                <Store className="h-4.5 w-4.5 text-white" />
                             </div>
-                            <div>
-                                <div className="flex items-center space-x-2">
-                                    <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-100 bg-clip-text text-transparent">
-                                        {companyName}
-                                    </h1>
-                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60">
-                                        Enterprise
-                                    </span>
-                                </div>
-                                <p className="text-[11px] text-slate-400">Inventory & Sales Subsystem Integration</p>
-                            </div>
-                        </div>
+                            <span className="text-base font-extrabold tracking-tight text-white group-hover:text-emerald-400 transition whitespace-nowrap">
+                                {companyName}
+                            </span>
+                        </Link>
 
-                        {/* Navigation Links */}
-                        <nav className="hidden md:flex space-x-1 lg:space-x-2">
+                        {/* Sleek Minimalist Segmented Navigation Dock */}
+                        <nav className="hidden md:flex items-center p-1 rounded-xl bg-slate-950/70 border border-slate-800 gap-1 shadow-inner">
                             {navItems.map((item) => {
                                 const Icon = item.icon;
                                 return (
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${item.active
-                                                ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-900/20'
-                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                                            }`}
+                                        title={item.name}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                                            item.active
+                                                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                                                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                                        }`}
                                     >
-                                        <Icon className={`h-4 w-4 ${item.active ? 'text-emerald-400' : 'text-slate-400'}`} />
-                                        <span className="whitespace-nowrap">{item.name}</span>
+                                        <Icon className={`h-4 w-4 shrink-0 ${item.active ? 'text-white' : 'text-slate-400'}`} />
+                                        <span className="hidden xl:inline">{item.name}</span>
+                                        <span className="hidden lg:inline xl:hidden">{item.shortName}</span>
                                     </Link>
                                 );
                             })}
                         </nav>
 
-                        {/* Right Side: Notifications + User */}
-                        <div className="flex items-center space-x-2">
+                        {/* Right Utility Bar: Theme + User Guide + Notifications + User */}
+                        <div className="flex items-center space-x-2 shrink-0">
+
+                            {/* Light / Dark Mode Toggle Button */}
+                            <button
+                                type="button"
+                                onClick={toggleTheme}
+                                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition flex items-center justify-center"
+                            >
+                                {theme === 'dark' ? (
+                                    <Sun className="h-4.5 w-4.5 text-amber-400 transition transform hover:rotate-45" />
+                                ) : (
+                                    <Moon className="h-4.5 w-4.5 text-teal-600 transition transform hover:-rotate-12" />
+                                )}
+                            </button>
+
+                            {/* Dedicated User Guide Help Button (Icon with Tooltip) */}
+                            <Link
+                                href="/guide"
+                                title="Visual User Guide & Demos"
+                                className={`p-2 rounded-lg transition flex items-center justify-center ${
+                                    url.startsWith('/guide')
+                                        ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                                        : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                                }`}
+                            >
+                                <HelpCircle className="h-4.5 w-4.5" />
+                            </Link>
+
                             {/* Notification Bell */}
                             <div className="relative" ref={notifRef}>
                                 <button
@@ -213,9 +393,12 @@ export default function MainLayout({ children, title }: Props) {
 
                                 {/* Notifications Dropdown */}
                                 {showNotifications && (
-                                    <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50">
-                                        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-                                            <h3 className="text-sm font-bold text-white">Notifications</h3>
+                                    <div className="absolute right-0 mt-2 w-88 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                                        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-850/50">
+                                            <div className="flex items-center gap-2">
+                                                <Bell className="h-4 w-4 text-emerald-400" />
+                                                <h3 className="text-sm font-bold text-white">Notifications</h3>
+                                            </div>
                                             {notifications.unread_count > 0 && (
                                                 <button
                                                     onClick={handleMarkAllRead}
@@ -225,7 +408,7 @@ export default function MainLayout({ children, title }: Props) {
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="max-h-80 overflow-y-auto">
+                                        <div className="max-h-88 overflow-y-auto divide-y divide-slate-800/60">
                                             {notifications.items.length === 0 ? (
                                                 <div className="px-4 py-8 text-center text-slate-500 text-xs">
                                                     No notifications yet
@@ -235,18 +418,29 @@ export default function MainLayout({ children, title }: Props) {
                                                     <button
                                                         key={notif.id}
                                                         onClick={() => handleNotificationClick(notif)}
-                                                        className={`w-full text-left px-4 py-3 border-b border-slate-800/60 hover:bg-slate-800/60 transition ${
+                                                        className={`w-full text-left px-4 py-3 hover:bg-slate-800/60 transition ${
                                                             !notif.is_read ? 'bg-emerald-950/20' : ''
                                                         }`}
                                                     >
-                                                        <div className="flex items-start gap-2">
+                                                        <div className="flex items-start gap-2.5">
                                                             {!notif.is_read && (
-                                                                <span className="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                                                                <span className="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0 animate-ping" />
                                                             )}
-                                                            <div className={!notif.is_read ? '' : 'pl-4'}>
-                                                                <p className="text-xs font-semibold text-white">{notif.title}</p>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center justify-between gap-1">
+                                                                    <p className="text-xs font-semibold text-white truncate">{notif.title}</p>
+                                                                    <span className="text-[10px] text-slate-500 shrink-0">{timeAgo(notif.created_at)}</span>
+                                                                </div>
                                                                 <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{notif.message}</p>
-                                                                <p className="text-[10px] text-slate-500 mt-1">{timeAgo(notif.created_at)}</p>
+                                                                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                                                                    <UserCheck className="h-3 w-3 shrink-0" />
+                                                                    <span>By: {notif.actor_name || 'System Admin'}</span>
+                                                                    {notif.actor_role && (
+                                                                        <span className="text-[9px] bg-slate-800 px-1 py-0.2 rounded text-slate-300 uppercase font-mono">
+                                                                            {notif.actor_role}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </button>
@@ -263,8 +457,12 @@ export default function MainLayout({ children, title }: Props) {
                                     onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); }}
                                     className="flex items-center space-x-2 bg-slate-900/80 hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-800 transition"
                                 >
-                                    <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-xs font-bold">
-                                        {auth?.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                    <div className="h-7 w-7 rounded-lg overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-xs font-bold border border-emerald-500/30 shrink-0">
+                                        {auth?.user?.avatar ? (
+                                            <img src={auth.user.avatar} alt={auth.user.name} className="h-full w-full object-cover" />
+                                        ) : (
+                                            auth?.user?.name?.charAt(0)?.toUpperCase() || 'U'
+                                        )}
                                     </div>
                                     <div className="hidden sm:block text-left">
                                         <span className="block text-xs font-semibold text-white leading-tight">{auth?.user?.name || 'User'}</span>
@@ -277,15 +475,48 @@ export default function MainLayout({ children, title }: Props) {
 
                                 {/* User Dropdown */}
                                 {showUserMenu && (
-                                    <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50">
-                                        <div className="px-4 py-3 border-b border-slate-800">
-                                            <p className="text-xs font-bold text-white">{auth?.user?.name}</p>
-                                            <p className="text-[10px] text-slate-400">{auth?.user?.email}</p>
+                                    <div className="absolute right-0 mt-2 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                                        <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-3">
+                                            <div className="h-10 w-10 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-sm font-bold border border-emerald-500/40 shrink-0 shadow-md">
+                                                {auth?.user?.avatar ? (
+                                                    <img src={auth.user.avatar} alt={auth.user.name} className="h-full w-full object-cover" />
+                                                ) : (
+                                                    auth?.user?.name?.charAt(0)?.toUpperCase() || 'U'
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold text-white truncate">{auth?.user?.name}</p>
+                                                <p className="text-[10px] text-emerald-400 font-mono">@{auth?.user?.username || 'user'}</p>
+                                                <p className="text-[10px] text-slate-400 truncate">{auth?.user?.email}</p>
+                                            </div>
                                         </div>
                                         <div className="py-1">
+                                            <button
+                                                onClick={() => {
+                                                    setIsProfileOpen(true);
+                                                    setShowUserMenu(false);
+                                                    setProfileName(auth?.user?.name || '');
+                                                    setProfileUsername(auth?.user?.username || '');
+                                                    setProfileEmail(auth?.user?.email || '');
+                                                    setProfileAvatar(auth?.user?.avatar || '');
+                                                }}
+                                                className="w-full flex items-center space-x-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                                            >
+                                                <User className="h-4 w-4 text-emerald-400" />
+                                                <span>My Profile & Avatar</span>
+                                            </button>
+                                            <Link
+                                                href="/guide"
+                                                onClick={() => setShowUserMenu(false)}
+                                                className="flex items-center space-x-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                                            >
+                                                <BookOpen className="h-4 w-4 text-teal-400" />
+                                                <span>User Guide & Manual</span>
+                                            </Link>
                                             {auth?.user?.role && ['admin', 'owner'].includes(auth.user.role) && (
                                                 <Link
                                                     href="/activity-log"
+                                                    onClick={() => setShowUserMenu(false)}
                                                     className="flex items-center space-x-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
                                                 >
                                                     <History className="h-4 w-4" />
@@ -295,6 +526,7 @@ export default function MainLayout({ children, title }: Props) {
                                             {auth?.user?.role === 'admin' && (
                                                 <Link
                                                     href="/settings"
+                                                    onClick={() => setShowUserMenu(false)}
                                                     className="flex items-center space-x-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
                                                 >
                                                     <Settings className="h-4 w-4" />
@@ -365,13 +597,250 @@ export default function MainLayout({ children, title }: Props) {
             {/* Footer */}
             <footer className="bg-slate-900/60 border-t border-slate-800/80 text-xs text-slate-500 py-4 mt-8">
                 <div className="max-w-7xl mx-auto px-4 text-center flex flex-col sm:flex-row items-center justify-between gap-2">
-                    <div className="flex items-center space-x-2">
-                        <Layers className="h-4 w-4 text-emerald-500" />
-                        <span>Subsystem 1 (Inventory) & Subsystem 2 (Distributors, Items, Sales & Purchase)</span>
-                    </div>
-                    <span>{companyName} Store System &copy; {new Date().getFullYear()}</span>
+                    <span className="font-semibold text-slate-400">{companyName} Store Management</span>
+                    <span>&copy; {new Date().getFullYear()} {companyName}. All rights reserved.</span>
                 </div>
             </footer>
+
+            {/* NOTIFICATION DETAILS MODAL - "WHO DID THE ACTION" */}
+            {selectedNotif && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+                        <div className="flex items-start justify-between border-b border-slate-800 pb-4 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-md">
+                                    <Bell className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">{selectedNotif.title}</h3>
+                                    <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                        <Clock className="h-3 w-3" />
+                                        <span>{new Date(selectedNotif.created_at).toLocaleString()}</span>
+                                        <span>•</span>
+                                        <span className="text-emerald-400 font-medium">{timeAgo(selectedNotif.created_at)}</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedNotif(null)}
+                                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* WHO DID THE ACTION BANNER */}
+                        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 mb-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <UserCheck className="h-3.5 w-3.5 text-emerald-400" />
+                                Action Performed By
+                            </p>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                                        {(selectedNotif.actor_name || 'S').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-white">{selectedNotif.actor_name || 'System Administrator'}</p>
+                                        <p className="text-xs text-slate-400">Account: {selectedNotif.actor_name || 'System'}</p>
+                                    </div>
+                                </div>
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60 uppercase">
+                                    {selectedNotif.actor_role || 'System'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* MESSAGE & DETAILS */}
+                        <div className="space-y-3 mb-6">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                    Activity Summary
+                                </label>
+                                <p className="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 leading-relaxed">
+                                    {selectedNotif.message}
+                                </p>
+                            </div>
+                            {selectedNotif.details && (
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                        Additional Details
+                                    </label>
+                                    <p className="text-xs font-mono text-emerald-300 bg-slate-950 border border-slate-800 rounded-xl p-3 whitespace-pre-wrap">
+                                        {selectedNotif.details}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* MODAL ACTIONS */}
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedNotif(null)}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                            >
+                                Dismiss
+                            </button>
+                            {selectedNotif.link && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const link = selectedNotif.link!;
+                                        setSelectedNotif(null);
+                                        router.visit(link);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-lg transition border border-emerald-400/30"
+                                >
+                                    <span>View Related Record</span>
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MY PROFILE MODAL */}
+            {isProfileOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div className="flex items-center gap-2">
+                                <User className="h-5 w-5 text-emerald-400" />
+                                <h3 className="text-base font-bold text-white">Update Profile</h3>
+                            </div>
+                            <button
+                                onClick={() => setIsProfileOpen(false)}
+                                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {profileError && (
+                            <div className="mb-4 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 shrink-0" />
+                                <span>{profileError}</span>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSaveProfile} className="space-y-4">
+                            {/* Avatar Upload */}
+                            <div className="flex items-center gap-4 p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
+                                <div className="relative group shrink-0">
+                                    <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-xl font-bold shadow-md overflow-hidden border-2 border-emerald-500/40">
+                                        {profileAvatar ? (
+                                            <img
+                                                src={profileAvatar}
+                                                alt="User Avatar"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            (profileName || 'U').charAt(0).toUpperCase()
+                                        )}
+                                    </div>
+                                    <label
+                                        htmlFor="profile-avatar-upload"
+                                        className="absolute -bottom-1 -right-1 p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow cursor-pointer transition"
+                                        title="Upload Profile Picture"
+                                    >
+                                        <Camera className="h-3.5 w-3.5" />
+                                        <input
+                                            id="profile-avatar-upload"
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                                            className="hidden"
+                                            onChange={handleAvatarUpload}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-white">Profile Photo</p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                        PNG, JPG, JPEG, WEBP. Auto-converted to optimized WebP.
+                                    </p>
+                                    {profileAvatar && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setProfileAvatar('')}
+                                            className="mt-1 text-[11px] text-rose-400 hover:text-rose-300 font-semibold inline-flex items-center gap-1"
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                            Remove photo
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={profileName}
+                                    onChange={(e) => setProfileName(e.target.value)}
+                                    placeholder="Enter your name"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Login Username</label>
+                                <input
+                                    type="text"
+                                    value={profileUsername}
+                                    onChange={(e) => setProfileUsername(e.target.value)}
+                                    placeholder="e.g. admin or john_doe"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Can be used interchangeably with email to log in.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address</label>
+                                <input
+                                    type="email"
+                                    required
+                                    value={profileEmail}
+                                    onChange={(e) => setProfileEmail(e.target.value)}
+                                    placeholder="name@example.com"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">New Password (leave blank to keep current)</label>
+                                <input
+                                    type="password"
+                                    value={profilePassword}
+                                    onChange={(e) => setProfilePassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsProfileOpen(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={profileProcessing}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-lg transition border border-emerald-400/30"
+                                >
+                                    <Save className="h-4 w-4" />
+                                    <span>{profileProcessing ? 'Saving...' : 'Save Profile'}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

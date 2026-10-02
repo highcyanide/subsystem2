@@ -13,6 +13,7 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
+        $showArchived = $request->boolean('archived', false);
         $distributorId = $request->query('distributor_id');
         $search = $request->query('search', '');
 
@@ -22,8 +23,14 @@ class ProductController extends Controller
             ? Distributor::find($distributorId)
             : $distributors->first();
 
+        $archivedCount = $selectedDistributor
+            ? Product::onlyTrashed()->where('distributor_id', $selectedDistributor->id)->count()
+            : Product::onlyTrashed()->count();
+
         $productsQuery = $selectedDistributor
-            ? Product::where('distributor_id', $selectedDistributor->id)
+            ? ($showArchived 
+                ? Product::onlyTrashed()->where('distributor_id', $selectedDistributor->id)
+                : Product::where('distributor_id', $selectedDistributor->id))
             : Product::query()->whereRaw('0 = 1'); // empty query
 
         if (!empty($search) && $selectedDistributor) {
@@ -43,9 +50,12 @@ class ProductController extends Controller
             'distributors' => $distributors,
             'selectedDistributor' => $selectedDistributor,
             'products' => $products,
+            'archivedCount' => $archivedCount,
+            'showArchived' => $showArchived,
             'categories' => $categories,
             'filters' => [
                 'search' => $search,
+                'archived' => $showArchived,
             ],
         ]);
     }
@@ -74,6 +84,16 @@ class ProductController extends Controller
 
         if (empty($validated['sku'])) {
             $validated['sku'] = strtoupper(substr($distributor->name, 0, 3)) . '-' . rand(100, 999);
+        }
+
+        // Prevent duplicate product with same name for this distributor
+        $exists = Product::where('distributor_id', $validated['distributor_id'])
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($validated['name']))])
+            ->exists();
+        if ($exists) {
+            return redirect()->back()->withErrors([
+                'name' => "Product '{$validated['name']}' already exists under this distributor."
+            ])->with('error', "Product '{$validated['name']}' already exists under this distributor!");
         }
 
         $product = Product::create($validated);
@@ -160,21 +180,46 @@ class ProductController extends Controller
         $distId = $product->distributor_id;
         $oldValues = $product->toArray();
 
-        $product->delete();
+        $product->delete(); // Soft delete
+
+        // Also soft-delete inventory entry if present
+        \App\Models\Inventory::where('product_id', $product->id)->delete();
 
         ActivityLog::log('deleted', 'Product', null,
-            "Deleted product: {$name}",
+            "Archived product: {$name}",
             $oldValues,
             null
         );
 
         \App\Models\Notification::notifyAll(
             'product_deleted',
-            'Product Removed',
-            "Product '{$name}' was deleted from the catalog.",
-            '/products?distributor_id=' . $distId
+            'Product Moved to Archive',
+            "Product '{$name}' was archived.",
+            '/products?distributor_id=' . $distId . '&archived=1'
         );
 
-        return redirect()->back()->with('success', 'Product removed successfully.');
+        return redirect()->back()->with('success', "Product '{$name}' moved to archive.");
+    }
+
+    public function restore($id)
+    {
+        $product = Product::onlyTrashed()->findOrFail($id);
+        $product->restore();
+
+        // Also restore inventory entry if present
+        \App\Models\Inventory::onlyTrashed()->where('product_id', $product->id)->restore();
+
+        ActivityLog::log('updated', 'Product', $product->id,
+            "Restored archived product: {$product->name}"
+        );
+
+        \App\Models\Notification::notifyAll(
+            'product_restored',
+            'Product Restored',
+            "Product '{$product->name}' was restored from archive.",
+            '/products?distributor_id=' . $product->distributor_id
+        );
+
+        return redirect()->back()->with('success', "Product '{$product->name}' restored successfully!");
     }
 }

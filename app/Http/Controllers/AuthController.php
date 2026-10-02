@@ -12,30 +12,46 @@ class AuthController extends Controller
 {
     public function showLogin()
     {
-        return Inertia::render('Auth/Login');
+        return Inertia::render('Auth/Login', [
+            'companyName' => \App\Models\Setting::getValue('company_name', config('app.name', 'WINZELLE')),
+            'settings' => \App\Models\Setting::allValues(),
+        ]);
     }
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+        $request->validate([
+            'username' => 'required|string',
+            'password' => 'required|string',
         ]);
 
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+        $loginInput = trim($request->input('username'));
+        $password = $request->input('password');
+        $remember = $request->boolean('remember');
+
+        // Look up user by username, email, or name
+        $user = User::whereRaw('LOWER(username) = ?', [strtolower($loginInput)])
+            ->orWhereRaw('LOWER(email) = ?', [strtolower($loginInput)])
+            ->orWhereRaw('LOWER(name) = ?', [strtolower($loginInput)])
+            ->first();
+
+        if ($user && Hash::check($password, $user->password)) {
+            Auth::login($user, $remember);
             $request->session()->regenerate();
+
+            \App\Models\ActivityLog::log('login', 'User', $user->id, "User {$user->name} logged in.");
 
             return redirect()->intended(route('sales-purchase.index'));
         }
 
         return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
+            'username' => 'These credentials do not match our records.',
         ]);
     }
 
     public function showRegister()
     {
-        return Inertia::render('Auth/Register');
+        return redirect()->route('login');
     }
 
     public function register(Request $request)

@@ -41,6 +41,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/{distributor}', [DistributorController::class, 'update'])->name('update')->middleware('role:admin,owner');
         Route::post('/{distributor}/toggle-favorite', [DistributorController::class, 'toggleFavorite'])->name('toggle-favorite');
         Route::delete('/{distributor}', [DistributorController::class, 'destroy'])->name('destroy')->middleware('role:admin');
+        Route::post('/{id}/restore', [DistributorController::class, 'restore'])->name('restore')->middleware('role:admin');
     });
 
     // Subsystem 2: Module 2 - Adding and Updating of Items of Each Distributor
@@ -49,6 +50,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/', [ProductController::class, 'store'])->middleware('role:admin,owner');
         Route::put('/{product}', [ProductController::class, 'update'])->name('update')->middleware('role:admin,owner');
         Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy')->middleware('role:admin');
+        Route::post('/{id}/restore', [ProductController::class, 'restore'])->name('restore')->middleware('role:admin');
     });
 
     // Subsystem 2: Module 3 - SALES & PURCHASE Page
@@ -57,7 +59,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/', [PurchaseController::class, 'store'])->middleware('role:admin,owner');
         Route::put('/{purchase}', [PurchaseController::class, 'update'])->name('update')->middleware('role:admin,owner');
         Route::delete('/{purchase}', [PurchaseController::class, 'destroy'])->name('destroy')->middleware('role:admin');
+        Route::post('/{id}/restore', [PurchaseController::class, 'restore'])->name('restore')->middleware('role:admin');
     });
+
+    // User Manual / Interactive Demo Guide
+    Route::get('/guide', function () {
+        return \Inertia\Inertia::render('Guide/Index');
+    })->name('guide.index');
 
     // Notifications API
     Route::prefix('notifications')->name('notifications.')->group(function () {
@@ -71,9 +79,16 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin,owner')
         ->name('activity-log.index');
 
+    // Profile update for any authenticated user
+    Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update');
+
     // Settings (Admin only)
     Route::prefix('settings')->name('settings.')->middleware('role:admin')->group(function () {
         Route::get('/', [SettingsController::class, 'index'])->name('index');
         Route::put('/', [SettingsController::class, 'update'])->name('update');
+        Route::post('/users', [SettingsController::class, 'storeUser'])->name('users.store');
+        Route::put('/users/{user}', [SettingsController::class, 'updateUser'])->name('users.update');
+        Route::delete('/users/{user}', [SettingsController::class, 'destroyUser'])->name('users.destroy');
+        Route::post('/users/{id}/restore', [SettingsController::class, 'restoreUser'])->name('users.restore');
     });
 });

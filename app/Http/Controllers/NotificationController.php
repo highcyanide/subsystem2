@@ -26,13 +26,21 @@ class NotificationController extends Controller
 
         $notification->update(['is_read' => true]);
 
-        return response()->json(['success' => true]);
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
+            return response()->json(['success' => true]);
+        }
+
+        return redirect()->back();
     }
 
     public function markAllAsRead(Request $request)
     {
         $request->user()->notifications()->where('is_read', false)->update(['is_read' => true]);
 
-        return response()->json(['success' => true]);
+        if ($request->expectsJson() && !$request->header('X-Inertia')) {
+            return response()->json(['success' => true]);
+        }
+
+        return redirect()->back();
     }
 }

@@ -180,6 +180,19 @@ class PurchaseController extends Controller
         $vatAdjustedAmount = $grossAmount * (1 - ($vatRate / 100));
         $netProfit = $grossAmount - $totalPurchase;
 
+        // Rapid double-click / debounce protection (within 3 seconds)
+        $recentDuplicate = Purchase::where('distributor_id', $distributor->id)
+            ->where('product_id', $product->id)
+            ->where('date', $validated['date'])
+            ->where('quantity', $quantity)
+            ->where('purchase_price', $purchasePrice)
+            ->where('created_at', '>=', now()->subSeconds(3))
+            ->first();
+
+        if ($recentDuplicate) {
+            return redirect()->back()->with('error', 'Duplicate transaction prevented. Please avoid rapid double-clicking.');
+        }
+
         $purchase = Purchase::create([
             'date' => $validated['date'],
             'distributor_id' => $distributor->id,
@@ -311,21 +324,46 @@ class PurchaseController extends Controller
             $inventory->save();
         }
 
-        $purchase->delete();
+        $purchase->delete(); // Soft delete
 
         ActivityLog::log('deleted', 'Purchase', null,
-            "Deleted purchase record (Product: {$prodName}, Qty: {$qty})",
+            "Archived purchase record (Product: {$prodName}, Qty: {$qty})",
             $oldValues,
             null
         );
 
         \App\Models\Notification::notifyAll(
             'purchase_deleted',
-            'Purchase Record Deleted',
-            "A purchase entry for {$qty}x {$prodName} was removed.",
+            'Purchase Record Archived',
+            "A purchase entry for {$qty}x {$prodName} was archived.",
             '/sales-purchase?distributor_id=' . $distId
         );
 
-        return redirect()->back()->with('success', 'Purchase record deleted and inventory adjusted.');
+        return redirect()->back()->with('success', 'Purchase record archived and inventory adjusted.');
+    }
+
+    public function restore($id)
+    {
+        $purchase = Purchase::onlyTrashed()->findOrFail($id);
+        $purchase->restore();
+
+        // Restore quantity in inventory
+        $inventory = Inventory::where('product_id', $purchase->product_id)->first();
+        if ($inventory) {
+            $inventory->increment('quantity', $purchase->quantity);
+        }
+
+        ActivityLog::log('updated', 'Purchase', $purchase->id,
+            "Restored archived purchase transaction #{$purchase->id}"
+        );
+
+        \App\Models\Notification::notifyAll(
+            'purchase_restored',
+            'Purchase Record Restored',
+            "Purchase record #{$purchase->id} was restored from archive.",
+            '/sales-purchase?distributor_id=' . $purchase->distributor_id
+        );
+
+        return redirect()->back()->with('success', 'Purchase record restored from archive.');
     }
 }

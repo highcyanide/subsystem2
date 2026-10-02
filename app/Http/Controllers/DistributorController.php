@@ -13,7 +13,12 @@ class DistributorController extends Controller
     {
         $search = $request->query('search', '');
 
-        $query = Distributor::withCount('products');
+        $showArchived = $request->boolean('archived', false);
+        $archivedCount = Distributor::onlyTrashed()->count();
+
+        $query = $showArchived 
+            ? Distributor::onlyTrashed()->withCount('products') 
+            : Distributor::withCount('products');
 
         if (!empty($search)) {
             $query->where(function ($q) use ($search) {
@@ -33,8 +38,11 @@ class DistributorController extends Controller
             'distributors' => $distributors,
             'favorites' => $favorites,
             'others' => $others,
+            'archivedCount' => $archivedCount,
+            'showArchived' => $showArchived,
             'filters' => [
                 'search' => $search,
+                'archived' => $showArchived,
             ],
         ]);
     }
@@ -49,6 +57,14 @@ class DistributorController extends Controller
             'logo' => 'nullable|string',
             'is_favorite' => 'boolean',
         ]);
+
+        // Duplicate name check (case-insensitive)
+        $exists = Distributor::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($validated['name']))])->exists();
+        if ($exists) {
+            return redirect()->back()->withErrors([
+                'name' => "Distributor '{$validated['name']}' already exists in the system."
+            ])->with('error', "Distributor '{$validated['name']}' already exists!");
+        }
 
         $distributor = Distributor::create($validated);
 
@@ -83,6 +99,13 @@ class DistributorController extends Controller
         $oldValues = $distributor->toArray();
         $distributor->update($validated);
 
+        // Dynamically sync updated distributor name across all inventory records
+        if (isset($oldValues['name']) && $oldValues['name'] !== $distributor->name) {
+            \App\Models\Inventory::where('distributor_name', $oldValues['name'])
+                ->orWhereIn('product_id', $distributor->products()->pluck('id'))
+                ->update(['distributor_name' => $distributor->name]);
+        }
+
         ActivityLog::log('updated', 'Distributor', $distributor->id,
             "Updated distributor: {$distributor->name}",
             $oldValues,
@@ -116,21 +139,40 @@ class DistributorController extends Controller
         $name = $distributor->name;
         $oldValues = $distributor->toArray();
 
-        $distributor->delete();
+        $distributor->delete(); // Soft delete
 
         ActivityLog::log('deleted', 'Distributor', null,
-            "Deleted distributor: {$name}",
+            "Archived distributor: {$name}",
             $oldValues,
             null
         );
 
         \App\Models\Notification::notifyAll(
             'distributor_deleted',
-            'Distributor Removed',
-            "Distributor '{$name}' was removed from the system.",
+            'Distributor Moved to Archive',
+            "Distributor '{$name}' was archived.",
+            '/distributors?archived=1'
+        );
+
+        return redirect()->back()->with('success', "Distributor '{$name}' moved to archive.");
+    }
+
+    public function restore($id)
+    {
+        $distributor = Distributor::onlyTrashed()->findOrFail($id);
+        $distributor->restore();
+
+        ActivityLog::log('updated', 'Distributor', $distributor->id,
+            "Restored archived distributor: {$distributor->name}"
+        );
+
+        \App\Models\Notification::notifyAll(
+            'distributor_restored',
+            'Distributor Restored',
+            "Distributor '{$distributor->name}' was restored from archive.",
             '/distributors'
         );
 
-        return redirect()->back()->with('success', 'Distributor deleted successfully.');
+        return redirect()->back()->with('success', "Distributor '{$distributor->name}' restored successfully!");
     }
 }

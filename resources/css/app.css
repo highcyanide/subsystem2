@@ -11,7 +11,8 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
-   WINZELLE LIGHT MODE THEME OVERRIDES
+   WINZELLE MINT-GREEN + WHITE + BLACK 3D LIGHT MODE
+   Eliminates all murky dark oklab colors and guarantees high contrast
    ══════════════════════════════════════════════════════════════ */
 html.theme-light,
 .theme-light {
@@ -21,168 +22,346 @@ html.theme-light,
 .theme-light,
 .theme-light body,
 .theme-light .min-h-screen {
-    background-color: #f8fafc !important; /* slate-50 */
-    color: #0f172a !important; /* slate-900 */
+    background-color: #f8fafc !important;
+    color: #09090b !important;
 }
 
-/* Header & Nav */
+/* 3D Elevated Header & Navigation Bar */
 .theme-light header {
-    background-color: rgba(255, 255, 255, 0.95) !important;
-    border-color: #e2e8f0 !important;
-    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05) !important;
-}
-
-/* Base card backgrounds */
-.theme-light .bg-slate-950 {
-    background-color: #f1f5f9 !important; /* slate-100 */
-    color: #0f172a !important;
-}
-
-.theme-light .bg-slate-900,
-.theme-light .bg-slate-900\/90,
-.theme-light .bg-slate-900\/80,
-.theme-light .bg-slate-900\/60,
-.theme-light .bg-slate-900\/50,
-.theme-light .bg-slate-900\/40,
-.theme-light .bg-slate-850 {
     background-color: #ffffff !important;
-    color: #0f172a !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05) !important;
 }
 
-.theme-light .bg-slate-800,
-.theme-light .bg-slate-800\/80,
-.theme-light .bg-slate-800\/60 {
-    background-color: #e2e8f0 !important; /* slate-200 */
-    color: #1e293b !important;
+.theme-light header a h1,
+.theme-light header a span.text-white {
+    color: #09090b !important;
 }
 
-.theme-light .bg-slate-800:hover {
-    background-color: #cbd5e1 !important; /* slate-300 */
+.theme-light header nav {
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
-/* Text colors */
-.theme-light .text-white {
-    color: #0f172a !important; /* slate-900 */
+.theme-light header nav a {
+    color: #475569 !important;
 }
 
-.theme-light .text-slate-100,
-.theme-light .text-slate-200,
-.theme-light .text-slate-300 {
-    color: #334155 !important; /* slate-700 */
+.theme-light header nav a:hover {
+    color: #047857 !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
 }
 
-.theme-light .text-slate-400 {
-    color: #64748b !important; /* slate-500 */
+.theme-light header nav a.bg-emerald-600 {
+    background-color: #059669 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3) !important;
 }
 
-/* Borders */
-.theme-light .border-slate-800,
-.theme-light .border-slate-700,
-.theme-light .border-slate-700\/80,
-.theme-light .border-slate-800\/80 {
-    border-color: #e2e8f0 !important; /* slate-200 */
+.theme-light header nav a.bg-emerald-600 span,
+.theme-light header nav a.bg-emerald-600 svg {
+    color: #ffffff !important;
 }
 
-/* Inputs, selects, and textareas */
+/* 3D Elevated White Cards & Main Panels (Catches any opacity suffix /90, /80, /60, etc.) */
+.theme-light [class*="bg-slate-900"],
+.theme-light [class*="bg-slate-850"] {
+    background-color: #ffffff !important;
+    color: #09090b !important;
+    border-color: #e4e4e7 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 10px 20px -3px rgba(0, 0, 0, 0.07), 0 2px 0 0 rgba(16, 185, 129, 0.2) !important;
+}
+
+/* Nested sub-containers, inner cards, and secondary sections */
+.theme-light [class*="bg-slate-950"] {
+    background-color: #f8fafc !important;
+    color: #09090b !important;
+    border-color: #e4e4e7 !important;
+}
+
+/* Inner panels inside modals and cards (e.g., Contact Info, Details) */
+.theme-light .fixed.inset-0 [class*="bg-slate-950"],
+.theme-light .fixed.inset-0 [class*="bg-slate-900"],
+.theme-light [role="dialog"] [class*="bg-slate-950"],
+.theme-light [role="dialog"] [class*="bg-slate-900"],
+.theme-light .space-y-4 > [class*="bg-slate-950"] {
+    background-color: #f8fafc !important;
+    border: 1px solid #e4e4e7 !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Modal Outer Dialogs */
+.theme-light .fixed.inset-0 .bg-slate-900,
+.theme-light .fixed.inset-0 [class*="bg-slate-900"],
+.theme-light .fixed.inset-0 .animate-scale-up {
+    background-color: #ffffff !important;
+    color: #09090b !important;
+    border: 1.5px solid #e4e4e7 !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08), 0 4px 0 0 #10b981 !important;
+}
+
+/* 3D Tactile Buttons & Secondary Panels */
+.theme-light [class*="bg-slate-800"] {
+    background-color: #f4f4f5 !important;
+    color: #09090b !important;
+    border: 1px solid #d4d4d8 !important;
+    box-shadow: 0 2px 0 0 #d4d4d8, 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+.theme-light [class*="bg-slate-800"]:hover {
+    background-color: #ecfdf5 !important;
+    color: #065f46 !important;
+    border-color: #10b981 !important;
+    box-shadow: 0 2px 0 0 #10b981, 0 2px 6px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Guarantee pill badges and chips never wrap words or create broken multi-line boxes */
+span[class*="rounded-full"],
+span[class*="rounded-md"].badge,
+.badge,
+.theme-light span[class*="rounded-full"],
+.theme-light span[class*="rounded-md"] {
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+    box-decoration-break: clone !important;
+    -webkit-box-decoration-break: clone !important;
+}
+
+/* Neutralize dark gradients on cards in light mode */
+.theme-light [class*="from-slate-"],
+.theme-light [class*="to-slate-"],
+.theme-light [class*="via-slate-"],
+.theme-light [class*="from-emerald-950"],
+.theme-light [class*="hover:from-emerald-950"] {
+    background-image: none !important;
+    background-color: #ffffff !important;
+    color: #09090b !important;
+}
+
+.theme-light [class*="from-slate-"]:hover,
+.theme-light [class*="from-emerald-950"]:hover {
+    background-color: #ecfdf5 !important;
+    border-color: #10b981 !important;
+}
+
+/* Solid Crisp High-Contrast Typography */
+.theme-light [class*="text-white"],
+.theme-light [class*="text-slate-100"],
+.theme-light [class*="text-slate-200"],
+.theme-light [class*="text-slate-300"] {
+    color: #09090b !important;
+}
+
+.theme-light strong,
+.theme-light b,
+.theme-light h1,
+.theme-light h2,
+.theme-light h3,
+.theme-light h4 {
+    color: #09090b !important;
+}
+
+.theme-light [class*="text-slate-400"] {
+    color: #334155 !important; /* High contrast dark slate */
+}
+
+.theme-light [class*="text-slate-500"] {
+    color: #475569 !important; /* Visible medium slate */
+}
+
+/* High Contrast Mint/Emerald & Accent Colors on White */
+.theme-light [class*="text-emerald-300"],
+.theme-light [class*="text-emerald-400"] {
+    color: #047857 !important; /* Deep emerald with WCAG AAA readability */
+}
+
+.theme-light [class*="text-teal-300"],
+.theme-light [class*="text-teal-400"] {
+    color: #0f766e !important;
+}
+
+.theme-light [class*="text-amber-300"],
+.theme-light [class*="text-amber-400"] {
+    color: #b45309 !important;
+}
+
+.theme-light [class*="text-rose-300"],
+.theme-light [class*="text-rose-400"] {
+    color: #be123c !important;
+}
+
+.theme-light .group:hover .group-hover\:text-emerald-300,
+.theme-light .group-hover\:text-emerald-300:hover,
+.theme-light .hover\:text-emerald-300:hover,
+.theme-light .group:hover .group-hover\:text-emerald-400,
+.theme-light .group-hover\:text-emerald-400:hover,
+.theme-light .hover\:text-emerald-400:hover {
+    color: #059669 !important;
+}
+
+/* Emerald Badges, Live Sync Pill, and Containers */
+.theme-light [class*="bg-emerald-950"],
+.theme-light [class*="bg-emerald-900"],
+.theme-light [class*="bg-emerald-500/20"],
+.theme-light [class*="bg-emerald-500/10"] {
+    background-color: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+    color: #065f46 !important;
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1) !important;
+}
+
+.theme-light [class*="bg-emerald-950"] span,
+.theme-light [class*="bg-emerald-950"] p,
+.theme-light [class*="bg-emerald-900"] span,
+.theme-light [class*="bg-emerald-900"] p {
+    color: #065f46 !important;
+}
+
+/* Amber/Yellow Badges & Containers */
+.theme-light [class*="bg-amber-950"],
+.theme-light [class*="bg-amber-900"],
+.theme-light [class*="bg-amber-500/10"],
+.theme-light [class*="bg-amber-500/20"] {
+    background-color: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #92400e !important;
+}
+
+.theme-light [class*="bg-amber-950"] span,
+.theme-light [class*="bg-amber-900"] span {
+    color: #92400e !important;
+}
+
+/* Rose/Red Badges & Containers */
+.theme-light [class*="bg-rose-950"],
+.theme-light [class*="bg-rose-900"],
+.theme-light [class*="bg-rose-500/10"],
+.theme-light [class*="bg-rose-500/20"] {
+    background-color: #fff1f2 !important;
+    border-color: #fecdd3 !important;
+    color: #9f1239 !important;
+}
+
+.theme-light [class*="bg-teal-950"],
+.theme-light [class*="bg-teal-900"] {
+    background-color: #f0fdf4 !important;
+    border-color: #bbf7d0 !important;
+    color: #047857 !important;
+}
+
+.theme-light .fill-amber-400 {
+    fill: #f59e0b !important;
+}
+
+/* Clean High-Contrast Borders */
+.theme-light [class*="border-slate-800"],
+.theme-light [class*="border-slate-700"] {
+    border-color: #e4e4e7 !important;
+}
+
+/* 3D Inset Inputs, Selects, and Textareas */
 .theme-light input,
 .theme-light select,
 .theme-light textarea {
     background-color: #ffffff !important;
-    color: #0f172a !important;
-    border-color: #cbd5e1 !important;
+    color: #09090b !important;
+    border: 1.5px solid #d4d4d8 !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04), 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .theme-light input::placeholder,
 .theme-light textarea::placeholder {
-    color: #94a3b8 !important;
+    color: #64748b !important;
 }
 
 .theme-light input:focus,
 .theme-light select:focus,
 .theme-light textarea:focus {
-    border-color: #059669 !important;
-    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2) !important;
+    border-color: #10b981 !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02), 0 0 0 3px rgba(16, 185, 129, 0.22) !important;
+    outline: none !important;
 }
 
-/* Tables */
+/* 3D Mint Accent Tables */
 .theme-light table thead tr {
-    background-color: #047857 !important; /* emerald-700 */
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%) !important;
     color: #ffffff !important;
+    box-shadow: 0 3px 6px rgba(5, 150, 105, 0.25) !important;
 }
 
 .theme-light table thead th {
     color: #ffffff !important;
-    border-color: #059669 !important;
+    border-color: #047857 !important;
+    font-weight: 700 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.theme-light table thead th button {
+    color: #ffffff !important;
+}
+
+.theme-light table thead th svg {
+    color: #ffffff !important;
 }
 
 .theme-light table tbody tr {
     background-color: #ffffff !important;
-    border-color: #f1f5f9 !important;
+    border-color: #f4f4f5 !important;
 }
 
 .theme-light table tbody tr:nth-child(even) {
-    background-color: #f8fafc !important;
+    background-color: #fbfcfc !important;
 }
 
 .theme-light table tbody tr:hover {
-    background-color: #f1f5f9 !important;
+    background-color: #ecfdf5 !important;
 }
 
 .theme-light table tbody td {
-    color: #1e293b !important;
-    border-color: #e2e8f0 !important;
+    color: #09090b !important;
+    border-color: #e4e4e7 !important;
 }
 
-/* Accented card badges */
-.theme-light .bg-emerald-950,
-.theme-light .bg-emerald-950\/80,
-.theme-light .bg-emerald-950\/60,
-.theme-light .bg-emerald-950\/40 {
-    background-color: #ecfdf5 !important; /* emerald-50 */
-    color: #047857 !important; /* emerald-700 */
-    border-color: #a7f3d0 !important;
+/* 3D Mint Green Badges & Action Buttons */
+.theme-light .bg-emerald-600,
+.theme-light .bg-emerald-500 {
+    background-color: #10b981 !important;
+    color: #ffffff !important;
+    box-shadow: 0 3px 0 0 #047857, 0 4px 10px rgba(16, 185, 129, 0.3) !important;
 }
 
-.theme-light .bg-teal-950 {
-    background-color: #f0fdfa !important; /* teal-50 */
-    color: #0f766e !important; /* teal-700 */
-    border-color: #99f6e4 !important;
-}
-
-.theme-light .bg-amber-950,
-.theme-light .bg-amber-950\/60 {
-    background-color: #fffbeb !important; /* amber-50 */
-    color: #b45309 !important; /* amber-700 */
-    border-color: #fde68a !important;
-}
-
-.theme-light .bg-rose-950,
-.theme-light .bg-rose-950\/60,
-.theme-light .bg-rose-950\/40 {
-    background-color: #fff1f2 !important; /* rose-50 */
-    color: #be123c !important; /* rose-700 */
-    border-color: #fecdd3 !important;
-}
-
-/* Modals and Dialogs in light mode */
-.theme-light .fixed.inset-0 .bg-slate-900 {
+/* 3D Dropdown Menus */
+.theme-light .relative .bg-slate-900,
+.theme-light div[role="menu"],
+.theme-light .dropdown-menu {
     background-color: #ffffff !important;
-    color: #0f172a !important;
-    border-color: #cbd5e1 !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+    border: 1px solid #e4e4e7 !important;
+    box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06), 0 2px 0 0 #10b981 !important;
 }
 
-.theme-light .fixed.inset-0 .bg-slate-950 {
+.theme-light .relative .bg-slate-850\/50,
+.theme-light .relative .bg-slate-850 {
     background-color: #f8fafc !important;
-    border-color: #cbd5e1 !important;
 }
 
-.theme-light .fixed.inset-0 .text-white {
-    color: #0f172a !important;
+/* Spreadsheet Accent Overrides */
+.theme-light .bg-emerald-800 {
+    background-color: #10b981 !important;
+    color: #ffffff !important;
 }
 
-.theme-light .fixed.inset-0 .text-slate-300,
-.theme-light .fixed.inset-0 .text-slate-400 {
-    color: #475569 !important;
+.theme-light .bg-emerald-900\/80 {
+    background-color: #059669 !important;
+    color: #ffffff !important;
+}
+
+/* Smooth Transitions */
+* {
+    transition-property: background-color, border-color, box-shadow, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-in-out;
 }

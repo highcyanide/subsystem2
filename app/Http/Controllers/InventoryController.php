@@ -13,8 +13,20 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         $search = $request->query('search', '');
-        $category = $request->query('category', '');
-        $distributor = $request->query('distributor', '');
+        
+        // Parse multi-select distributors (array, comma-separated, or single string)
+        $rawDistributors = $request->input('distributors', $request->query('distributor', []));
+        $selectedDistributors = is_array($rawDistributors) 
+            ? $rawDistributors 
+            : (is_string($rawDistributors) && strlen($rawDistributors) > 0 ? explode(',', $rawDistributors) : []);
+        $selectedDistributors = array_values(array_filter(array_map('trim', $selectedDistributors)));
+
+        // Parse multi-select categories (array, comma-separated, or single string)
+        $rawCategories = $request->input('categories', $request->query('category', []));
+        $selectedCategories = is_array($rawCategories) 
+            ? $rawCategories 
+            : (is_string($rawCategories) && strlen($rawCategories) > 0 ? explode(',', $rawCategories) : []);
+        $selectedCategories = array_values(array_filter(array_map('trim', $selectedCategories)));
 
         $query = Inventory::query();
 
@@ -26,18 +38,18 @@ class InventoryController extends Controller
             });
         }
 
-        if (!empty($category)) {
-            $query->where('category', $category);
+        if (!empty($selectedCategories)) {
+            $query->whereIn('category', $selectedCategories);
         }
 
-        if (!empty($distributor)) {
-            $query->where('distributor_name', $distributor);
+        if (!empty($selectedDistributors)) {
+            $query->whereIn('distributor_name', $selectedDistributors);
         }
 
         $inventories = $query->orderBy('updated_at', 'desc')->get();
 
-        $categories = Inventory::select('category')->distinct()->pluck('category');
-        $distributors = Inventory::select('distributor_name')->distinct()->pluck('distributor_name');
+        $categories = Inventory::whereNotNull('category')->distinct()->pluck('category')->filter()->values();
+        $distributors = Inventory::whereNotNull('distributor_name')->distinct()->pluck('distributor_name')->filter()->values();
 
         $totalItems = $inventories->sum('quantity');
         $totalValuation = $inventories->sum(function ($item) {
@@ -58,8 +70,8 @@ class InventoryController extends Controller
             ],
             'filters' => [
                 'search' => $search,
-                'category' => $category,
-                'distributor' => $distributor,
+                'categories' => $selectedCategories,
+                'distributors' => $selectedDistributors,
             ],
             'lowStockThreshold' => $lowStockThreshold,
         ]);

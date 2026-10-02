@@ -8,9 +8,14 @@ const ROLES = [
     { value: 'checker', label: 'Checker', description: 'Can view data and update inventory quantities', icon: ClipboardCheck, color: 'slate' },
 ];
 
-export default function Register() {
-    const { settings } = usePage().props as any;
-    const companyName = settings?.company_name || 'WINZELLE';
+interface RegisterProps {
+    companyName?: string;
+    settings?: Record<string, string>;
+}
+
+export default function Register({ companyName: propCompanyName, settings: propSettings }: RegisterProps) {
+    const pageProps = (usePage().props as any) || {};
+    const companyName = propCompanyName || propSettings?.company_name || pageProps.settings?.company_name || pageProps.companyName || 'WINZELLE';
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
