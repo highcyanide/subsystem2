@@ -114,6 +114,21 @@ export default function MainLayout({ children, title }: Props) {
 
     const notifRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
+    const isNavigatingRef = useRef(false);
+
+    // Track active navigation to prevent background reload race conditions
+    useEffect(() => {
+        const removeStart = router.on('start', () => {
+            isNavigatingRef.current = true;
+        });
+        const removeFinish = router.on('finish', () => {
+            isNavigatingRef.current = false;
+        });
+        return () => {
+            removeStart();
+            removeFinish();
+        };
+    }, []);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -134,6 +149,10 @@ export default function MainLayout({ children, title }: Props) {
         if (!auth?.user) return;
 
         const performDynamicSync = () => {
+            // Never reload if user is currently navigating or if tab is in the background
+            if (isNavigatingRef.current || document.hidden) {
+                return;
+            }
             // Avoid background reload while user is actively typing in an input, textarea, or selecting options
             const activeEl = document.activeElement;
             const activeTag = activeEl?.tagName?.toLowerCase();
@@ -158,8 +177,8 @@ export default function MainLayout({ children, title }: Props) {
             });
         };
 
-        // Live periodic poll every 4 seconds for instant cross-user dynamic updates
-        const interval = setInterval(performDynamicSync, 4000);
+        // Live periodic poll every 5 seconds for instant cross-user dynamic updates
+        const interval = setInterval(performDynamicSync, 5000);
 
         // Immediate dynamic sync when window/tab regains focus
         const handleWindowFocus = () => {

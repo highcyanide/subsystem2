@@ -144,10 +144,12 @@ export default function ProductsIndex({
     };
 
     const handleDistributorChange = (distId: number) => {
+        setSearchQuery('');
+        setCurrentPage(1);
         router.get('/products', { 
             distributor_id: distId,
             archived: showArchived ? 1 : undefined
-        }, { preserveState: true, preserveScroll: true });
+        }, { preserveState: false, preserveScroll: true, replace: true });
     };
 
     const openAddModal = () => {

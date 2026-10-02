@@ -19,9 +19,8 @@ class ProductController extends Controller
 
         $distributors = Distributor::orderBy('name')->get();
 
-        $selectedDistributor = $distributorId
-            ? Distributor::find($distributorId)
-            : $distributors->first();
+        $selectedDistributor = ($distributorId ? Distributor::find($distributorId) : null) 
+            ?? $distributors->first();
 
         $archivedCount = $selectedDistributor
             ? Product::onlyTrashed()->where('distributor_id', $selectedDistributor->id)->count()
@@ -56,6 +55,7 @@ class ProductController extends Controller
             'filters' => [
                 'search' => $search,
                 'archived' => $showArchived,
+                'distributor_id' => $selectedDistributor ? $selectedDistributor->id : null,
             ],
         ]);
     }

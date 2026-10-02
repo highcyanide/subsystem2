@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router, usePage, Link } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
 import ConfirmModal from '@/Components/ConfirmModal';
 import TablePagination from '@/Components/TablePagination';
@@ -473,9 +473,14 @@ export default function DistributorsIndex({
 
                                     {/* Bottom row: Product count and details hint */}
                                     <div className="w-full pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                                        <span className="text-[11px] text-slate-400 font-mono bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50">
+                                        <Link
+                                            href={`/products?distributor_id=${dist.id}`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="text-[11px] text-slate-300 hover:text-emerald-300 font-mono bg-slate-800/80 hover:bg-slate-700/80 px-2 py-0.5 rounded-md border border-slate-700 transition"
+                                            title="View products directly"
+                                        >
                                             {dist.products_count || 0} Products
-                                        </span>
+                                        </Link>
                                         <span className="text-[11px] font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
                                             Details &rarr;
                                         </span>
@@ -544,9 +549,14 @@ export default function DistributorsIndex({
 
                                         {/* Bottom row: Product count and details hint */}
                                         <div className="w-full pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                                            <span className="text-[11px] text-slate-400 font-mono bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50">
+                                            <Link
+                                                href={`/products?distributor_id=${dist.id}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-[11px] text-slate-300 hover:text-emerald-300 font-mono bg-slate-800/80 hover:bg-slate-700/80 px-2 py-0.5 rounded-md border border-slate-700 transition"
+                                                title="View products directly"
+                                            >
                                                 {dist.products_count || 0} Products
-                                            </span>
+                                            </Link>
                                             <span className="text-[11px] font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
                                                 Details &rarr;
                                             </span>
@@ -597,11 +607,17 @@ export default function DistributorsIndex({
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="py-2.5 px-3 font-bold text-white">
+                                            <td className="py-2.5 px-3 font-bold text-white cursor-pointer hover:text-emerald-400 transition" onClick={() => openViewModal(dist)}>
                                                 {dist.name}
                                             </td>
                                             <td className="py-2.5 px-3 text-center font-mono font-semibold text-emerald-400">
-                                                {dist.products_count || 0}
+                                                <Link
+                                                    href={`/products?distributor_id=${dist.id}`}
+                                                    className="hover:underline"
+                                                    title="View products"
+                                                >
+                                                    {dist.products_count || 0}
+                                                </Link>
                                             </td>
                                             <td className="py-2.5 px-3 text-slate-300 font-mono">
                                                 {dist.contact_number}
@@ -621,6 +637,13 @@ export default function DistributorsIndex({
                                                 </button>
                                             </td>
                                             <td className="py-2.5 px-3 text-center space-x-1">
+                                                <Link
+                                                    href={`/products?distributor_id=${dist.id}`}
+                                                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition inline-flex items-center"
+                                                    title="Manage Products"
+                                                >
+                                                    <Package className="h-4 w-4" />
+                                                </Link>
                                                 {showArchived ? (
                                                     <button
                                                         type="button"
@@ -928,19 +951,19 @@ export default function DistributorsIndex({
                                     <span>Inventory & Operations</span>
                                 </h4>
                                 <div className="grid grid-cols-2 gap-2 pt-1">
-                                    <a
+                                    <Link
                                         href={`/products?distributor_id=${viewingDistributor.id}`}
                                         className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center justify-center gap-1 text-center"
                                     >
                                         <span>View Products ({viewingDistributor.products_count || 0})</span>
                                         <ExternalLink className="h-3 w-3 text-slate-400" />
-                                    </a>
-                                    <a
+                                    </Link>
+                                    <Link
                                         href={`/sales-purchase?distributor_id=${viewingDistributor.id}`}
                                         className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center gap-1 text-center"
                                     >
                                         <span>Transactions &rarr;</span>
-                                    </a>
+                                    </Link>
                                 </div>
                             </div>
                         </div>
