@@ -1,9 +1,10 @@
 @echo off
-title Winzelle System - Online Launcher
+title Winzelle System - Online Launcher (winzelle.dpdns.org)
 color 0A
 
 echo ========================================================
-echo       STARTING WINZELLE SYSTEM + CLOUD TUNNEL
+echo       STARTING WINZELLE SYSTEM + CLOUDFLARE TUNNEL
+echo       Domain: https://winzelle.dpdns.org
 echo ========================================================
 echo.
 
@@ -25,16 +26,18 @@ echo [2/3] Starting Laravel backend server (port 8000)...
 start "Winzelle Laravel Backend" /min cmd /c "php artisan serve --host 0.0.0.0 --port 8000"
 timeout /t 2 /nobreak >nul
 
-:: Start Cloudflare Tunnel
-echo [3/3] Starting Cloudflare Tunnel...
+:: Start Cloudflare Permanent Named Tunnel
+echo [3/3] Starting Cloudflare Tunnel for winzelle.dpdns.org...
 echo.
 echo ========================================================
 echo   SYSTEM IS NOW ONLINE!
+echo   Permanent URL: https://winzelle.dpdns.org
+echo.
 echo   Keep this window open to stay connected.
 echo   To turn OFF the online site, simply close this window.
 echo ========================================================
 echo.
 
-"C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --url http://localhost:8000
+cloudflared tunnel run winzelle-tunnel
 
 pause
