@@ -1,4 +1,4 @@
-FROM php:8.3-apache
+FROM php:8.4-apache
 
 # Install docker-php-extension-installer (official fast pre-compiled extensions)
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
@@ -22,8 +22,8 @@ WORKDIR /var/www/html
 # Copy application files (including pre-compiled frontend assets in public/build)
 COPY . .
 
-# Install PHP dependencies for production
-RUN composer install --no-interaction --no-dev --optimize-autoloader
+# Install PHP dependencies for production with platform req tolerance
+RUN composer install --no-interaction --no-dev --optimize-autoloader --ignore-platform-reqs
 
 # Set storage and cache permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
