@@ -5,8 +5,8 @@ ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/do
 RUN chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions pdo_mysql mbstring exif pcntl bcmath gd zip opcache
 
-# Install system utilities needed by composer/git
-RUN apt-get update && apt-get install -y git zip unzip && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install system utilities needed by composer/git and SSL CA certs
+RUN apt-get update && apt-get install -y git zip unzip ca-certificates && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
