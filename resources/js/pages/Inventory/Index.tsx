@@ -15,7 +15,11 @@ import {
     Download,
     FileSpreadsheet,
     Building2,
-    Tag
+    Tag,
+    ChevronDown,
+    SlidersHorizontal,
+    Plus,
+    Minus
 } from 'lucide-react';
 import { useTablePaginationAndSort } from '@/hooks/useTablePaginationAndSort';
 import TablePagination from '@/Components/TablePagination';
@@ -33,6 +37,8 @@ interface InventoryItem {
     purchase_price: number;
     selling_price: number;
     updated_at: string;
+    total_valuation?: number;
+    stock_status?: string;
 }
 
 interface Summary {
@@ -97,9 +103,44 @@ export default function InventoryIndex({
 
     const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     
-    // Quick inline stock editor
+    const userRole = props?.auth?.user?.role || 'guest';
+    const canEditStock = userRole === 'admin' || userRole === 'owner' || userRole === 'checker';
+
+    // Batch Selection State
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
+
+    // Batch Stock Adjust Modal State
+    const [isBatchStockModalOpen, setIsBatchStockModalOpen] = useState(false);
+    const [stockActionMode, setStockActionMode] = useState<'set' | 'adjust'>('set');
+    const [stockSetQty, setStockSetQty] = useState<number>(10);
+    const [stockAdjustDelta, setStockAdjustDelta] = useState<number>(5);
+    const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
+
+    // Batch Category Modal State
+    const [isBatchCategoryModalOpen, setIsBatchCategoryModalOpen] = useState(false);
+    const [selectedNewCategory, setSelectedNewCategory] = useState<string>('');
+    const [customNewCategory, setCustomNewCategory] = useState<string>('');
+
+    // Quick inline stock editor (if needed)
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editQty, setEditQty] = useState<number>(0);
+
+    // Enrich inventories with pre-calculated fields for sorting & display
+    const enrichedInventories = useMemo(() => {
+        return inventories.map(item => {
+            const qty = Number(item.quantity) || 0;
+            const pPrice = Number(item.purchase_price) || 0;
+            const valuation = qty * pPrice;
+            const isLow = qty <= lowStockThreshold;
+            const status = isLow ? 'Low Stock' : 'In Stock';
+            return {
+                ...item,
+                total_valuation: valuation,
+                stock_status: status
+            };
+        });
+    }, [inventories, lowStockThreshold]);
 
     // Sorting & Pagination
     const {
@@ -114,11 +155,48 @@ export default function InventoryIndex({
         setPage,
         setPageSize,
     } = useTablePaginationAndSort({
-        data: inventories,
+        data: enrichedInventories,
         defaultSortKey: 'quantity',
         defaultDirection: 'asc',
         defaultPageSize: 10,
     });
+
+    // Compute active totals based on filtered & sorted dataset
+    const tableTotals = useMemo(() => {
+        let totalQty = 0;
+        let totalValuation = 0;
+        let sumPurchase = 0;
+        let sumSelling = 0;
+        let inStock = 0;
+        let lowStock = 0;
+
+        sortedData.forEach(item => {
+            const q = Number(item.quantity) || 0;
+            const p = Number(item.purchase_price) || 0;
+            const s = Number(item.selling_price) || 0;
+            const v = Number(item.total_valuation) || (q * p);
+            totalQty += q;
+            totalValuation += v;
+            sumPurchase += p;
+            sumSelling += s;
+            if (q <= lowStockThreshold) lowStock++;
+            else inStock++;
+        });
+
+        const count = sortedData.length;
+        const avgPurchase = count > 0 ? (sumPurchase / count) : 0;
+        const avgSelling = count > 0 ? (sumSelling / count) : 0;
+
+        return {
+            count,
+            totalQty,
+            totalValuation,
+            avgPurchase,
+            avgSelling,
+            inStock,
+            lowStock
+        };
+    }, [sortedData, lowStockThreshold]);
 
     const triggerBackendFilter = (
         dists: string[] = selectedDistributors,
@@ -214,7 +292,6 @@ export default function InventoryIndex({
 
     const handleExportExcel = () => {
         const exportData = sortedData.map(item => ({
-            product_id: item.product_id,
             sku: item.sku,
             category: item.category,
             distributor_name: item.distributor_name,
@@ -222,7 +299,8 @@ export default function InventoryIndex({
             purchase_price: Number(item.purchase_price) || 0,
             selling_price: Number(item.selling_price) || 0,
             quantity: Number(item.quantity) || 0,
-            total_valuation: (Number(item.purchase_price) || 0) * (Number(item.quantity) || 0)
+            stock_status: item.stock_status,
+            total_valuation: item.total_valuation ?? ((Number(item.purchase_price) || 0) * (Number(item.quantity) || 0))
         }));
 
         exportInventoryExcel(companyName, exportData, 'inventory_report');
@@ -230,7 +308,6 @@ export default function InventoryIndex({
 
     const handleExportCSV = () => {
         const exportData = sortedData.map(item => ({
-            product_id: item.product_id,
             sku: item.sku,
             category: item.category,
             distributor_name: item.distributor_name,
@@ -238,10 +315,131 @@ export default function InventoryIndex({
             purchase_price: Number(item.purchase_price) || 0,
             selling_price: Number(item.selling_price) || 0,
             quantity: Number(item.quantity) || 0,
-            total_valuation: (Number(item.purchase_price) || 0) * (Number(item.quantity) || 0)
+            stock_status: item.stock_status,
+            total_valuation: item.total_valuation ?? ((Number(item.purchase_price) || 0) * (Number(item.quantity) || 0))
         }));
 
         exportInventoryCSV(companyName, exportData, 'inventory_report');
+    };
+
+    // Selection helpers
+    const isAllOnPageSelected = useMemo(() => {
+        if (paginatedData.length === 0) return false;
+        return paginatedData.every(item => selectedIds.includes(item.id));
+    }, [paginatedData, selectedIds]);
+
+    const isSomeOnPageSelected = useMemo(() => {
+        if (paginatedData.length === 0) return false;
+        return paginatedData.some(item => selectedIds.includes(item.id)) && !isAllOnPageSelected;
+    }, [paginatedData, selectedIds, isAllOnPageSelected]);
+
+    const handleToggleSelectAllOnPage = () => {
+        if (isAllOnPageSelected) {
+            const pageIds = paginatedData.map(i => i.id);
+            setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
+        } else {
+            const pageIds = paginatedData.map(i => i.id);
+            setSelectedIds(prev => Array.from(new Set([...prev, ...pageIds])));
+        }
+    };
+
+    const handleToggleSelectRow = (id: number) => {
+        setSelectedIds(prev => 
+            prev.includes(id) ? prev.filter(itemId => itemId !== id) : [...prev, id]
+        );
+    };
+
+    const handleSelectAllMatching = () => {
+        setSelectedIds(inventories.map(i => i.id));
+    };
+
+    const handleClearSelection = () => {
+        setSelectedIds([]);
+        setIsActionDropdownOpen(false);
+    };
+
+    // Export Selected items
+    const handleExportSelectedExcel = () => {
+        const selectedItems = enrichedInventories.filter(item => selectedIds.includes(item.id));
+        const exportData = (selectedItems.length > 0 ? selectedItems : sortedData).map(item => ({
+            sku: item.sku,
+            category: item.category,
+            distributor_name: item.distributor_name,
+            product_name: item.product_name,
+            purchase_price: Number(item.purchase_price) || 0,
+            selling_price: Number(item.selling_price) || 0,
+            quantity: Number(item.quantity) || 0,
+            stock_status: item.stock_status,
+            total_valuation: item.total_valuation ?? ((Number(item.purchase_price) || 0) * (Number(item.quantity) || 0))
+        }));
+
+        exportInventoryExcel(companyName, exportData, `inventory_selected_${selectedItems.length}`);
+    };
+
+    const handleExportSelectedCSV = () => {
+        const selectedItems = enrichedInventories.filter(item => selectedIds.includes(item.id));
+        const exportData = (selectedItems.length > 0 ? selectedItems : sortedData).map(item => ({
+            sku: item.sku,
+            category: item.category,
+            distributor_name: item.distributor_name,
+            product_name: item.product_name,
+            purchase_price: Number(item.purchase_price) || 0,
+            selling_price: Number(item.selling_price) || 0,
+            quantity: Number(item.quantity) || 0,
+            stock_status: item.stock_status,
+            total_valuation: item.total_valuation ?? ((Number(item.purchase_price) || 0) * (Number(item.quantity) || 0))
+        }));
+
+        exportInventoryCSV(companyName, exportData, `inventory_selected_${selectedItems.length}`);
+    };
+
+    // Batch Submit Handlers
+    const handleExecuteBatchStock = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (selectedIds.length === 0) return;
+        setIsSubmittingBatch(true);
+
+        const payload: any = {
+            ids: selectedIds,
+            action: stockActionMode === 'set' ? 'set_quantity' : 'add_quantity',
+        };
+
+        if (stockActionMode === 'set') {
+            payload.quantity = stockSetQty;
+        } else {
+            payload.adjustment = stockAdjustDelta;
+        }
+
+        router.post('/inventory/batch', payload, {
+            onSuccess: () => {
+                setIsBatchStockModalOpen(false);
+                setSelectedIds([]);
+            },
+            onFinish: () => setIsSubmittingBatch(false),
+            preserveScroll: true
+        });
+    };
+
+    const handleExecuteBatchCategory = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (selectedIds.length === 0) return;
+        const targetCategory = customNewCategory.trim() || selectedNewCategory;
+        if (!targetCategory) return;
+
+        setIsSubmittingBatch(true);
+        router.post('/inventory/batch', {
+            ids: selectedIds,
+            action: 'set_category',
+            category: targetCategory
+        }, {
+            onSuccess: () => {
+                setIsBatchCategoryModalOpen(false);
+                setSelectedIds([]);
+                setCustomNewCategory('');
+            },
+            onFinish: () => setIsSubmittingBatch(false),
+            preserveScroll: true
+        });
     };
 
     const hasActiveFilters = Boolean(
@@ -469,23 +667,193 @@ export default function InventoryIndex({
             </div>
 
             {/* ======================================================== */}
-            {/* INVENTORY TABLE                                          */}
+            {/* INVENTORY TABLE WITH BATCH SELECTION & ACTION DROPDOWN   */}
             {/* ======================================================== */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="bg-slate-850 px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-                    <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <Boxes className="h-4 w-4 text-emerald-400" />
-                        <span>Inventory</span>
-                    </h2>
-                    <span className="text-xs text-slate-400 font-mono">
-                        {totalItems} items matching
-                    </span>
+                {/* Header bar: Transforms into batch toolbar when 1+ items selected */}
+                <div className={`px-5 py-3 border-b transition-all duration-300 flex flex-wrap items-center justify-between gap-3 ${
+                    selectedIds.length > 0 
+                        ? 'bg-gradient-to-r from-emerald-950/90 via-slate-900 to-slate-900 border-emerald-500/50 shadow-inner' 
+                        : 'bg-slate-850 border-slate-800'
+                }`}>
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <Boxes className="h-4 w-4 text-emerald-400" />
+                            <span>Inventory</span>
+                        </h2>
+
+                        {selectedIds.length > 0 ? (
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-500 text-slate-950 shadow-md">
+                                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                                    <span>{selectedIds.length} {selectedIds.length === 1 ? 'item' : 'items'} selected</span>
+                                </span>
+                                {selectedIds.length < inventories.length && (
+                                    <button
+                                        type="button"
+                                        onClick={handleSelectAllMatching}
+                                        className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 ml-1"
+                                    >
+                                        Select all {inventories.length} matching
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-400 font-mono">
+                                {totalItems} items matching
+                            </span>
+                        )}
+                    </div>
+
+                    {/* ACTION DROPDOWN / BATCH CONTROLS (REVEALED ONLY WHEN 1+ ITEMS ARE SELECTED) */}
+                    {selectedIds.length > 0 && (
+                        <div className="flex items-center gap-2 relative">
+                            {/* Quick Action Button: Adjust Stock */}
+                            {canEditStock && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (selectedIds.length === 1) {
+                                            const singleItem = inventories.find(i => i.id === selectedIds[0]);
+                                            if (singleItem) setStockSetQty(singleItem.quantity);
+                                        }
+                                        setIsBatchStockModalOpen(true);
+                                    }}
+                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5"
+                                >
+                                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                                    <span>Adjust Stock {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}</span>
+                                </button>
+                            )}
+
+                            {/* Dropdown Menu Toggle */}
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsActionDropdownOpen(!isActionDropdownOpen)}
+                                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
+                                >
+                                    <span>Actions</span>
+                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isActionDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {/* Dropdown Menu */}
+                                {isActionDropdownOpen && (
+                                    <>
+                                        <div 
+                                            className="fixed inset-0 z-30" 
+                                            onClick={() => setIsActionDropdownOpen(false)} 
+                                        />
+                                        <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-40 py-1.5 text-xs animate-scale-up">
+                                            <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                                                Batch Actions ({selectedIds.length} Selected)
+                                            </div>
+
+                                            {canEditStock && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsActionDropdownOpen(false);
+                                                            if (selectedIds.length === 1) {
+                                                                const singleItem = inventories.find(i => i.id === selectedIds[0]);
+                                                                if (singleItem) setStockSetQty(singleItem.quantity);
+                                                            }
+                                                            setIsBatchStockModalOpen(true);
+                                                        }}
+                                                        className="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 hover:text-emerald-400 transition flex items-center gap-2"
+                                                    >
+                                                        <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400" />
+                                                        <span>Adjust Stock Quantity</span>
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsActionDropdownOpen(false);
+                                                            setSelectedNewCategory(categories[0] || '');
+                                                            setCustomNewCategory('');
+                                                            setIsBatchCategoryModalOpen(true);
+                                                        }}
+                                                        className="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 hover:text-emerald-400 transition flex items-center gap-2"
+                                                    >
+                                                        <Tag className="h-3.5 w-3.5 text-teal-400" />
+                                                        <span>Update Category</span>
+                                                    </button>
+
+                                                    <div className="my-1 border-t border-slate-800" />
+                                                </>
+                                            )}
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionDropdownOpen(false);
+                                                    handleExportSelectedExcel();
+                                                }}
+                                                className="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 hover:text-emerald-400 transition flex items-center gap-2"
+                                            >
+                                                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" />
+                                                <span>Export Selected to Excel</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionDropdownOpen(false);
+                                                    handleExportSelectedCSV();
+                                                }}
+                                                className="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 hover:text-emerald-400 transition flex items-center gap-2"
+                                            >
+                                                <Download className="h-3.5 w-3.5 text-slate-400" />
+                                                <span>Export Selected to CSV</span>
+                                            </button>
+
+                                            <div className="my-1 border-t border-slate-800" />
+
+                                            <button
+                                                type="button"
+                                                onClick={handleClearSelection}
+                                                className="w-full text-left px-3.5 py-2 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition flex items-center gap-2"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                                <span>Deselect All</span>
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Clear Selection Button */}
+                            <button
+                                type="button"
+                                onClick={handleClearSelection}
+                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                                title="Clear selection"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                         <thead>
                             <tr className="bg-slate-950 text-slate-300 font-bold uppercase tracking-wider text-[11px] border-b border-slate-800">
+                                {/* First Column: Master Checkbox */}
+                                <th className="py-3 px-3 text-center w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllOnPageSelected}
+                                        ref={(el) => {
+                                            if (el) el.indeterminate = isSomeOnPageSelected;
+                                        }}
+                                        onChange={handleToggleSelectAllOnPage}
+                                        className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                                        title={isAllOnPageSelected ? "Deselect all on this page" : "Select all on this page"}
+                                    />
+                                </th>
                                 <SortableHeader label="SKU" sortKey="sku" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="whitespace-nowrap" />
                                 <SortableHeader label="Category" sortKey="category" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="whitespace-nowrap" />
                                 <SortableHeader label="Distributor" sortKey="distributor_name" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="whitespace-nowrap" />
@@ -493,30 +861,54 @@ export default function InventoryIndex({
                                 <SortableHeader label="Purchase Price" sortKey="purchase_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="whitespace-nowrap" />
                                 <SortableHeader label="Selling Price" sortKey="selling_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="whitespace-nowrap" />
                                 <SortableHeader label="Stock Quantity" sortKey="quantity" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="center" className="whitespace-nowrap" />
-                                <th className="py-3 px-4 text-center whitespace-nowrap">Stock Status</th>
-                                <th className="py-3 px-4 text-center whitespace-nowrap">Action</th>
+                                <SortableHeader label="Stock Status" sortKey="stock_status" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="center" className="whitespace-nowrap" />
+                                <SortableHeader label="Total Valuation" sortKey="total_valuation" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="whitespace-nowrap" />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/80 bg-slate-900/60 font-sans">
                             {paginatedData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="py-12 text-center text-slate-500">
+                                    <td colSpan={10} className="py-12 text-center text-slate-500">
                                         No inventory records match your criteria.
                                     </td>
                                 </tr>
                             ) : (
                                 paginatedData.map((item) => {
-                                    const isEditing = editingId === item.id;
+                                    const isSelected = selectedIds.includes(item.id);
                                     const isLowStock = item.quantity <= lowStockThreshold;
 
                                     return (
-                                        <tr key={item.id} className="hover:bg-slate-850/80 transition-colors">
+                                        <tr 
+                                            key={item.id} 
+                                            className={`transition-colors cursor-pointer select-none ${
+                                                isSelected 
+                                                    ? 'bg-emerald-950/40 hover:bg-emerald-950/60' 
+                                                    : 'hover:bg-slate-850/80'
+                                            }`}
+                                            onClick={(e) => {
+                                                const target = e.target as HTMLElement;
+                                                if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.closest('button')) {
+                                                    return;
+                                                }
+                                                handleToggleSelectRow(item.id);
+                                            }}
+                                        >
+                                            {/* First Column: Checkbox */}
+                                            <td className="py-3 px-3 text-center w-10" onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => handleToggleSelectRow(item.id)}
+                                                    className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                                                />
+                                            </td>
+
                                             {/* SKU */}
                                             <td className="py-3 px-4 font-mono font-bold text-emerald-400 whitespace-nowrap">
                                                 {item.sku || 'N/A'}
                                             </td>
 
-                                            {/* Category (whitespace-nowrap inline-flex) */}
+                                            {/* Category */}
                                             <td className="py-3 px-4 whitespace-nowrap">
                                                 <span className="whitespace-nowrap inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700 shadow-sm">
                                                     {item.category}
@@ -545,23 +937,13 @@ export default function InventoryIndex({
 
                                             {/* Stock Quantity */}
                                             <td className="py-3 px-4 text-center whitespace-nowrap">
-                                                {isEditing ? (
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        value={editQty}
-                                                        onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
-                                                        className="w-20 bg-slate-950 border border-emerald-500 rounded px-2 py-1 text-center font-bold text-white text-xs"
-                                                    />
-                                                ) : (
-                                                    <span className={`font-mono font-black text-sm px-2.5 py-0.5 rounded whitespace-nowrap ${
-                                                        isLowStock 
-                                                            ? 'bg-amber-950 text-amber-300 border border-amber-700/60' 
-                                                            : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
-                                                    }`}>
-                                                        {item.quantity}
-                                                    </span>
-                                                )}
+                                                <span className={`font-mono font-black text-sm px-2.5 py-0.5 rounded whitespace-nowrap ${
+                                                    isLowStock 
+                                                        ? 'bg-amber-950 text-amber-300 border border-amber-700/60' 
+                                                        : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                                                }`}>
+                                                    {item.quantity}
+                                                </span>
                                             </td>
 
                                             {/* Stock Status */}
@@ -579,40 +961,38 @@ export default function InventoryIndex({
                                                 )}
                                             </td>
 
-                                            {/* Action */}
-                                            <td className="py-3 px-4 text-center whitespace-nowrap">
-                                                {isEditing ? (
-                                                    <div className="flex items-center justify-center space-x-1">
-                                                        <button
-                                                            onClick={() => saveQuantityUpdate(item.id)}
-                                                            className="p-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded"
-                                                            title="Save"
-                                                        >
-                                                            <Check className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setEditingId(null)}
-                                                            className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded"
-                                                            title="Cancel"
-                                                        >
-                                                            <X className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => startEditing(item)}
-                                                        className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition"
-                                                        title="Adjust Stock Quantity"
-                                                    >
-                                                        <Edit3 className="h-4 w-4" />
-                                                    </button>
-                                                )}
+                                            {/* Total Valuation */}
+                                            <td className="py-3 px-4 text-right font-mono font-bold whitespace-nowrap text-emerald-400">
+                                                {formatCurrency(item.total_valuation ?? ((Number(item.purchase_price) || 0) * (Number(item.quantity) || 0)))}
                                             </td>
                                         </tr>
                                     );
                                 })
                             )}
                         </tbody>
+                        <tfoot className="bg-slate-950 border-t-2 border-slate-700 text-xs font-bold text-slate-200">
+                            <tr>
+                                <td className="py-3.5 px-3"></td>
+                                <td colSpan={4} className="py-3.5 px-4 text-right uppercase tracking-wider text-slate-400">
+                                    TOTALS ({tableTotals.count} SKUs):
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-mono text-slate-300 whitespace-nowrap" title="Average Purchase Price">
+                                    {formatCurrency(tableTotals.avgPurchase)} <span className="text-[10px] text-slate-500 font-normal block sm:inline">(Avg)</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-mono text-emerald-300 whitespace-nowrap" title="Average Selling Price">
+                                    {formatCurrency(tableTotals.avgSelling)} <span className="text-[10px] text-slate-500 font-normal block sm:inline">(Avg)</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-center font-mono font-black text-white text-sm whitespace-nowrap">
+                                    {tableTotals.totalQty.toLocaleString()}
+                                </td>
+                                <td className="py-3.5 px-4 text-center text-[11px] text-slate-400 whitespace-nowrap">
+                                    <span className="text-emerald-400 font-bold">{tableTotals.inStock} In</span> / <span className="text-amber-400 font-bold">{tableTotals.lowStock} Low</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-400 text-sm whitespace-nowrap">
+                                    {formatCurrency(tableTotals.totalValuation)}
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
 
@@ -626,6 +1006,230 @@ export default function InventoryIndex({
                     onPageSizeChange={setPageSize}
                 />
             </div>
+
+            {/* ======================================================== */}
+            {/* BATCH ADJUST STOCK QUANTITY MODAL                        */}
+            {/* ======================================================== */}
+            {isBatchStockModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div className="flex items-center space-x-2">
+                                <SlidersHorizontal className="h-5 w-5 text-emerald-400" />
+                                <h3 className="text-base font-bold text-white">
+                                    {selectedIds.length === 1 ? 'Adjust Stock Quantity' : `Batch Adjust Stock (${selectedIds.length} Items)`}
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsBatchStockModalOpen(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleExecuteBatchStock} className="space-y-4">
+                            <p className="text-xs text-slate-400">
+                                Update inventory stock levels for {selectedIds.length === 1 ? 'the selected item' : `all ${selectedIds.length} selected items`}.
+                            </p>
+
+                            {/* Mode Tabs */}
+                            <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs font-semibold">
+                                <button
+                                    type="button"
+                                    onClick={() => setStockActionMode('set')}
+                                    className={`py-2 rounded-lg transition text-center ${
+                                        stockActionMode === 'set'
+                                            ? 'bg-emerald-600 text-white font-bold shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    Set Fixed Value
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStockActionMode('adjust')}
+                                    className={`py-2 rounded-lg transition text-center ${
+                                        stockActionMode === 'adjust'
+                                            ? 'bg-emerald-600 text-white font-bold shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    Add / Subtract
+                                </button>
+                            </div>
+
+                            {stockActionMode === 'set' ? (
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                        New Stock Quantity (Units)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={stockSetQty}
+                                        onChange={(e) => setStockSetQty(Math.max(0, parseInt(e.target.value) || 0))}
+                                        className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none"
+                                        required
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        Sets the stock quantity of all {selectedIds.length} item(s) directly to this value.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                        Stock Quantity Adjustment
+                                    </label>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setStockAdjustDelta(prev => prev - 5)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold"
+                                        >
+                                            -5
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setStockAdjustDelta(prev => prev - 1)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold"
+                                        >
+                                            -1
+                                        </button>
+                                        <input
+                                            type="number"
+                                            value={stockAdjustDelta}
+                                            onChange={(e) => setStockAdjustDelta(parseInt(e.target.value) || 0)}
+                                            className="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-center font-bold text-sm text-emerald-400 focus:outline-none"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setStockAdjustDelta(prev => prev + 1)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold"
+                                        >
+                                            +1
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setStockAdjustDelta(prev => prev + 5)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold"
+                                        >
+                                            +5
+                                        </button>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        Use positive numbers (e.g. +10) to add stock, or negative numbers (e.g. -5) to deduct.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Modal Actions */}
+                            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsBatchStockModalOpen(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmittingBatch}
+                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-1.5 disabled:opacity-50"
+                                >
+                                    <Check className="h-4 w-4" />
+                                    <span>{isSubmittingBatch ? 'Applying Changes...' : 'Save Stock Update'}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ======================================================== */}
+            {/* BATCH UPDATE CATEGORY MODAL                              */}
+            {/* ======================================================== */}
+            {isBatchCategoryModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-slate-900 border border-teal-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div className="flex items-center space-x-2">
+                                <Tag className="h-5 w-5 text-teal-400" />
+                                <h3 className="text-base font-bold text-white">
+                                    Update Category ({selectedIds.length} Items)
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsBatchCategoryModalOpen(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleExecuteBatchCategory} className="space-y-4">
+                            <p className="text-xs text-slate-400">
+                                Select or type a new category to assign to all {selectedIds.length} selected items.
+                            </p>
+
+                            {/* Existing Categories Picker */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    Choose Existing Category
+                                </label>
+                                <select
+                                    value={selectedNewCategory}
+                                    onChange={(e) => {
+                                        setSelectedNewCategory(e.target.value);
+                                        setCustomNewCategory('');
+                                    }}
+                                    className="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-4 py-2.5 text-xs font-semibold text-white focus:outline-none"
+                                >
+                                    {categories.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Or Custom Category Input */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    Or Create New Category
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Type custom category name..."
+                                    value={customNewCategory}
+                                    onChange={(e) => setCustomNewCategory(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none"
+                                />
+                            </div>
+
+                            {/* Modal Actions */}
+                            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsBatchCategoryModalOpen(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmittingBatch || (!customNewCategory.trim() && !selectedNewCategory)}
+                                    className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-1.5 disabled:opacity-50"
+                                >
+                                    <Check className="h-4 w-4" />
+                                    <span>{isSubmittingBatch ? 'Updating...' : 'Assign Category'}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </MainLayout>
     );
 }

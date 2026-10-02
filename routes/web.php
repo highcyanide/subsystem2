@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('inventory')->name('inventory.')->group(function () {
         Route::get('/', [InventoryController::class, 'index'])->name('index');
         Route::patch('/{inventory}/quantity', [InventoryController::class, 'updateQuantity'])->name('update-quantity');
+        Route::post('/batch', [InventoryController::class, 'batchUpdate'])->name('batch-update');
     });
 
     // Subsystem 2: Module 1 - Adding of Distributors

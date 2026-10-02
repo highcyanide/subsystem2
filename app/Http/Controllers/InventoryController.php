@@ -105,4 +105,55 @@ class InventoryController extends Controller
 
         return redirect()->back()->with('success', 'Stock quantity updated.');
     }
+
+    public function batchUpdate(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|integer|exists:inventories,id',
+            'action' => 'required|string|in:set_quantity,add_quantity,set_category',
+            'quantity' => 'nullable|required_if:action,set_quantity|integer|min:0',
+            'adjustment' => 'nullable|required_if:action,add_quantity|integer',
+            'category' => 'nullable|required_if:action,set_category|string|max:100',
+        ]);
+
+        $ids = $validated['ids'];
+        $action = $validated['action'];
+        $count = count($ids);
+
+        if ($action === 'set_quantity') {
+            $qty = (int) $validated['quantity'];
+            Inventory::whereIn('id', $ids)->update(['quantity' => $qty]);
+            ActivityLog::log('updated', 'Inventory', null,
+                "Batch updated stock quantity to {$qty} for {$count} item(s)",
+                null,
+                ['ids' => $ids, 'quantity' => $qty]
+            );
+            $msg = "Successfully updated stock quantity to {$qty} for {$count} item(s).";
+        } elseif ($action === 'add_quantity') {
+            $adj = (int) $validated['adjustment'];
+            foreach (Inventory::whereIn('id', $ids)->get() as $inv) {
+                $newQty = max(0, $inv->quantity + $adj);
+                $inv->update(['quantity' => $newQty]);
+            }
+            $sign = $adj >= 0 ? "+{$adj}" : "{$adj}";
+            ActivityLog::log('updated', 'Inventory', null,
+                "Batch adjusted stock by {$sign} for {$count} item(s)",
+                null,
+                ['ids' => $ids, 'adjustment' => $adj]
+            );
+            $msg = "Successfully adjusted stock by {$sign} for {$count} item(s).";
+        } elseif ($action === 'set_category') {
+            $cat = trim($validated['category']);
+            Inventory::whereIn('id', $ids)->update(['category' => $cat]);
+            ActivityLog::log('updated', 'Inventory', null,
+                "Batch updated category to '{$cat}' for {$count} item(s)",
+                null,
+                ['ids' => $ids, 'category' => $cat]
+            );
+            $msg = "Successfully updated category to '{$cat}' for {$count} item(s).";
+        }
+
+        return redirect()->back()->with('success', $msg ?? 'Batch action completed successfully.');
+    }
 }

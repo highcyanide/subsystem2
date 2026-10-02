@@ -679,7 +679,7 @@ export default function SalesPurchaseIndex({
     };
 
     const handleExportExcel = () => {
-        const companyName = settings?.company_name || 'WINZELLE';
+        const companyName = (settings?.company_name || 'WINZELLE').replace(/\s+STORE$/i, '').trim();
         const exportData = sortedData.map(item => ({
             date: item.date,
             provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
@@ -700,7 +700,7 @@ export default function SalesPurchaseIndex({
     };
 
     const handleExportCSV = () => {
-        const companyName = settings?.company_name || 'WINZELLE';
+        const companyName = (settings?.company_name || 'WINZELLE').replace(/\s+STORE$/i, '').trim();
         const exportData = sortedData.map(item => ({
             date: item.date,
             provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
