@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
-import { Store, LogIn, Eye, EyeOff, ShieldCheck, User } from 'lucide-react';
+import { Warehouse, LogIn, Eye, EyeOff, ShieldCheck, User } from 'lucide-react';
 
 interface LoginProps {
     companyName?: string;
@@ -46,12 +46,14 @@ export default function Login({ companyName: propCompanyName, settings: propSett
                 {/* Logo & Header */}
                 <div className="text-center mb-8">
                     <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 items-center justify-center shadow-xl shadow-emerald-900/40 border border-emerald-400/30 mb-4">
-                        <Store className="h-8 w-8 text-white" />
+                        <Warehouse className="h-8 w-8 text-white" />
                     </div>
                     <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-100 bg-clip-text text-transparent">
                         {companyName}
                     </h1>
-                    <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-semibold">Store Management System</p>
+                    <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider font-semibold max-w-sm mx-auto leading-relaxed">
+                        Warehouse Inventory Management with Distributor Management and Dynamic Delivery Processing System
+                    </p>
                 </div>
 
                 {/* Secure Login Card */}

@@ -171,9 +171,9 @@ export default function GuideIndex() {
             canManageUsers: true,
         },
         owner: {
-            title: 'Store Owner / Manager',
+            title: 'Warehouse Manager / Operations',
             badge: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-            description: 'Oversees daily store operations, incoming distributor trucks, sales markups, and stock oversight.',
+            description: 'Oversees daily warehouse operations, incoming distributor trucks, stock allocations, and delivery processing.',
             canAddDistributors: true,
             canRecordPurchases: true,
             canEditProducts: true,
@@ -182,9 +182,9 @@ export default function GuideIndex() {
             canManageUsers: false,
         },
         checker: {
-            title: 'Stock Checker / Staff',
+            title: 'Stock Checker / Warehouse Staff',
             badge: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
-            description: 'Frontline store team member. Can count shelf inventory and view distributor products safely.',
+            description: 'Frontline warehouse team member. Can count warehouse inventory and view distributor products safely.',
             canAddDistributors: false,
             canRecordPurchases: true,
             canEditProducts: false,
@@ -215,10 +215,10 @@ export default function GuideIndex() {
                             <span>100% Visual • Easy to Understand • Interactive Live Demos</span>
                         </div>
                         <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-                            Store Owner's Visual Guide & Manual
+                            Warehouse & Operations Visual Guide & Manual
                         </h1>
                         <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-                            No tech jargon! See and test the exact <strong>Distributor Cards</strong>, <strong>Delivery Auto-Sync</strong>, and <strong>BIR 2023 Excel Reports</strong> right on this page before doing it live.
+                            No tech jargon! See and test the exact <strong>Distributor Cards</strong>, <strong>Dynamic Delivery Processing</strong>, and <strong>BIR 2023 Excel Reports</strong> right on this page before doing it live.
                         </p>
                     </div>
 
@@ -246,7 +246,7 @@ export default function GuideIndex() {
                     }`}
                 >
                     <TrendingUp className="h-4 w-4" />
-                    <span>1. How The Store Works</span>
+                    <span>1. How The Warehouse Works</span>
                 </button>
 
                 <button
@@ -316,14 +316,14 @@ export default function GuideIndex() {
             </div>
 
             {/* ======================================================== */}
-            {/* SECTION 1: HOW THE STORE WORKS (4-STEP VISUAL LIFECYCLE) */}
+            {/* SECTION 1: HOW THE WAREHOUSE WORKS (4-STEP VISUAL LIFECYCLE) */}
             {/* ======================================================== */}
             {activeSection === 'flow' && (
                 <div className="space-y-6">
                     <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
                         <div className="mb-6">
-                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Store Workflow Overview</span>
-                            <h2 className="text-2xl font-black text-white mt-1">From Distributor Truck to Store Shelf in 4 Steps</h2>
+                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Warehouse Workflow Overview</span>
+                            <h2 className="text-2xl font-black text-white mt-1">From Distributor Delivery to Warehouse Inventory in 4 Steps</h2>
                             <p className="text-xs text-slate-400 mt-1">
                                 Everything in Winzelle connects automatically so you never have to double-encode stock or perform manual calculations.
                             </p>
@@ -755,7 +755,7 @@ export default function GuideIndex() {
                                         <span className="font-bold text-white font-mono">{formatCurrency(prodPurchasePrice)}</span>
                                     </div>
                                     <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                                        <span className="text-[10px] text-slate-400 block">Store Selling</span>
+                                        <span className="text-[10px] text-slate-400 block">Selling / Outbound</span>
                                         <span className="font-bold text-teal-300 font-mono">{formatCurrency(prodSellingPrice)}</span>
                                     </div>
                                     <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40">
@@ -865,7 +865,7 @@ export default function GuideIndex() {
                                         {shelfStock}
                                     </div>
                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mt-1">
-                                        Units Currently On Store Shelf
+                                        Units Currently In Warehouse Stock
                                     </span>
                                 </div>
 

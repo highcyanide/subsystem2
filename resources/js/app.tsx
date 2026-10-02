@@ -7,8 +7,8 @@ const appName = import.meta.env.VITE_APP_NAME || 'Inventory & Sales System';
 void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
        resolve: (name) => {
-        const pages = import.meta.glob('./Pages/**/*.tsx', { eager: true });
-        return pages[`./Pages/${name}.tsx` as string];
+        const pages: Record<string, any> = import.meta.glob(['./Pages/**/*.tsx', './pages/**/*.tsx'], { eager: true });
+        return pages[`./Pages/${name}.tsx`] || pages[`./pages/${name}.tsx`];
     },
     setup({ el, App, props }) {
         const root = createRoot(el);

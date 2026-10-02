@@ -9,8 +9,8 @@ export default function render(page: any) {
         render: ReactDOMServer.renderToString,
         title: (title) => (title ? `${title} - ${appName}` : appName),
         resolve: (name) => {
-            const pages = import.meta.glob('./Pages/**/*.tsx', { eager: true });
-            return pages[`./Pages/${name}.tsx` as string];
+            const pages: Record<string, any> = import.meta.glob(['./Pages/**/*.tsx', './pages/**/*.tsx'], { eager: true });
+            return pages[`./Pages/${name}.tsx`] || pages[`./pages/${name}.tsx`];
         },
         setup: ({ App, props }) => <App {...props} />,
     });

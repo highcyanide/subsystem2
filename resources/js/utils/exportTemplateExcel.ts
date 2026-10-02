@@ -37,8 +37,8 @@ export async function exportSalesPurchaseExcel(
     filenamePrefix: string = 'sales_purchase_report'
 ) {
     const wb = new ExcelJS.Workbook();
-    wb.creator = `${companyName} STORE SYSTEM`;
-    wb.lastModifiedBy = `${companyName} STORE SYSTEM`;
+    wb.creator = `${companyName} WAREHOUSE SYSTEM`;
+    wb.lastModifiedBy = `${companyName} WAREHOUSE SYSTEM`;
     wb.created = new Date();
     wb.modified = new Date();
 
@@ -298,8 +298,8 @@ export async function exportInventoryExcel(
     filenamePrefix: string = 'inventory_report'
 ) {
     const wb = new ExcelJS.Workbook();
-    wb.creator = `${companyName} STORE SYSTEM`;
-    wb.lastModifiedBy = `${companyName} STORE SYSTEM`;
+    wb.creator = `${companyName} WAREHOUSE SYSTEM`;
+    wb.lastModifiedBy = `${companyName} WAREHOUSE SYSTEM`;
     wb.created = new Date();
     wb.modified = new Date();
 

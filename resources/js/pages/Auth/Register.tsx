@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
-import { Store, UserPlus, Eye, EyeOff, ShieldCheck, Crown, ClipboardCheck } from 'lucide-react';
+import { Warehouse, UserPlus, Eye, EyeOff, ShieldCheck, Crown, ClipboardCheck } from 'lucide-react';
 
 const ROLES = [
     { value: 'admin', label: 'Administrator', description: 'Full access to all features, settings, and user management', icon: ShieldCheck, color: 'emerald' },
@@ -60,7 +60,7 @@ export default function Register({ companyName: propCompanyName, settings: propS
                 {/* Logo */}
                 <div className="text-center mb-8">
                     <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 items-center justify-center shadow-2xl shadow-emerald-900/40 border border-emerald-400/30 mb-4">
-                        <Store className="h-8 w-8 text-white" />
+                        <Warehouse className="h-8 w-8 text-white" />
                     </div>
                     <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-100 bg-clip-text text-transparent">
                         {companyName}

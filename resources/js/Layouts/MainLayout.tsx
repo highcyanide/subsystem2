@@ -5,7 +5,7 @@ import {
     Truck,
     PackagePlus,
     TrendingUp,
-    Store,
+    Warehouse,
     Layers,
     CheckCircle2,
     ShieldCheck,
@@ -330,9 +330,9 @@ export default function MainLayout({ children, title }: Props) {
                     <div className="flex items-center justify-between h-15 gap-4">
 
                         {/* Minimalist Brand Logo & Title */}
-                        <Link href="/" className="flex items-center space-x-2.5 group shrink-0" title={`${companyName} Store`}>
+                        <Link href="/" className="flex items-center space-x-2.5 group shrink-0" title={`${companyName} - Warehouse Inventory Management with Distributor Management and Dynamic Delivery Processing System`}>
                             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 flex items-center justify-center shadow-md shadow-emerald-900/20 border border-emerald-400/30 group-hover:scale-105 transition">
-                                <Store className="h-4.5 w-4.5 text-white" />
+                                <Warehouse className="h-4.5 w-4.5 text-white" />
                             </div>
                             <span className="text-base font-extrabold tracking-tight text-white group-hover:text-emerald-400 transition whitespace-nowrap">
                                 {companyName}
@@ -616,7 +616,7 @@ export default function MainLayout({ children, title }: Props) {
             {/* Footer */}
             <footer className="bg-slate-900/60 border-t border-slate-800/80 text-xs text-slate-500 py-4 mt-8">
                 <div className="max-w-7xl mx-auto px-4 text-center flex flex-col sm:flex-row items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-400">{companyName} Store Management</span>
+                    <span className="font-semibold text-slate-400">{companyName} &bull; Warehouse Inventory Management with Distributor Management and Dynamic Delivery Processing System</span>
                     <span>&copy; {new Date().getFullYear()} {companyName}. All rights reserved.</span>
                 </div>
             </footer>
