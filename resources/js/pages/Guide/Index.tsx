@@ -341,7 +341,7 @@ export default function GuideIndex() {
                                         <span>Add Distributor</span>
                                     </h3>
                                     <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                                        Register distributor companies (e.g. <strong>PEPSI</strong>, <strong>COCA-COLA</strong>, <strong>SAN MIGUEL</strong>). Upload their company logo so their card stands out.
+                                        Register distributor Distributors (e.g. <strong>PEPSI</strong>, <strong>COCA-COLA</strong>, <strong>SAN MIGUEL</strong>). Upload their company logo so their card stands out.
                                     </p>
                                 </div>
                                 <button

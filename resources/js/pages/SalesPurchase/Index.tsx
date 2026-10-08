@@ -4,7 +4,7 @@ import MainLayout from '@/Layouts/MainLayout';
 import ConfirmModal from '@/Components/ConfirmModal';
 import { downloadCSV } from '@/utils/exportCsv';
 import { exportSalesPurchaseExcel, exportSalesPurchaseCSV } from '@/utils/exportTemplateExcel';
-import { useTablePaginationAndSort } from '@/hooks/useTablePaginationAndSort';
+import { useTablePaginationAndSort, LaravelPaginator } from '@/hooks/useTablePaginationAndSort';
 import TablePagination from '@/Components/TablePagination';
 import SortableHeader from '@/Components/SortableHeader';
 import {
@@ -12,6 +12,7 @@ import {
     Star,
     Plus,
     Calendar,
+    AlertTriangle,
     ArrowLeft,
     Trash2,
     Edit2,
@@ -32,7 +33,9 @@ import {
     Download,
     FileSpreadsheet,
     Loader2,
-    TrendingUp
+    TrendingUp,
+    Maximize2,
+    ChevronUp
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -94,6 +97,10 @@ interface Product {
     name: string;
     sku?: string;
     category: string;
+    size_value?: string;
+    packaging?: string;
+    unit_id?: number;
+    unit?: { id: number; symbol: string; name: string } | null;
     purchase_price: number;
     default_discount: number;
     default_dealing_price: number;
@@ -136,7 +143,7 @@ interface Props {
     isAllDistributors?: boolean;
     products: Product[];
     allProducts?: Product[];
-    purchases: Purchase[];
+    purchases: Purchase[] | LaravelPaginator<Purchase>;
     summary: Summary;
     availableDates: string[];
     filters: {
@@ -180,6 +187,7 @@ export default function SalesPurchaseIndex({
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
     // Sorting & Pagination for Purchases Spreadsheet
     const {
@@ -193,12 +201,26 @@ export default function SalesPurchaseIndex({
         totalItems,
         setPage,
         setPageSize,
+        startIndex,
+        endIndex,
     } = useTablePaginationAndSort({
         data: purchases,
         defaultSortKey: 'date',
         defaultDirection: 'desc',
         defaultPageSize: 15,
     });
+
+    // Teaser vs Full Table Modal
+    const [isTableExpanded, setIsTableExpanded] = useState(false);
+    const [isFullTableModalOpen, setIsFullTableModalOpen] = useState(false);
+
+    // 1-3 Rows Snapshot dataset when collapsed and no search
+    const displayedData = React.useMemo(() => {
+        if (!isTableExpanded && !searchQuery.trim()) {
+            return (paginatedData || sortedData).slice(0, 3);
+        }
+        return paginatedData;
+    }, [isTableExpanded, searchQuery, sortedData, paginatedData]);
 
     // Distributor Multi-Select Filter Modal State
     const [isDistributorModalOpen, setIsDistributorModalOpen] = useState(false);
@@ -603,6 +625,7 @@ export default function SalesPurchaseIndex({
         setFormDate(new Date().toISOString().split('T')[0]);
         setFormQuantity(10);
         setFormVatRate(defaultVatPercentage);
+        setPurchaseError(null);
         setEditingPurchase(null);
         setIsAddModalOpen(true);
     };
@@ -616,13 +639,19 @@ export default function SalesPurchaseIndex({
         setFormPurchasePrice(Number(purchase.purchase_price));
         setFormDiscount(Number(purchase.discount));
         setFormVatRate(Number(purchase.vat_percentage));
+        setPurchaseError(null);
         setIsAddModalOpen(true);
     };
 
     const handleSubmitPurchase = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formDistributorId || !formProductId || isSubmitting) return;
+        if (!formDistributorId || !formProductId || isSubmitting) {
+            if (!formDistributorId) setPurchaseError('Please select a distributor.');
+            else if (!formProductId) setPurchaseError('Please select a product.');
+            return;
+        }
 
+        setPurchaseError(null);
         setIsSubmitting(true);
         const payload = {
             date: formDate,
@@ -642,6 +671,10 @@ export default function SalesPurchaseIndex({
                     setIsAddModalOpen(false);
                     setEditingPurchase(null);
                 },
+                onError: (errs) => {
+                    const first = Object.values(errs)[0];
+                    setPurchaseError(typeof first === 'string' ? first : 'Validation error occurred.');
+                },
                 onFinish: () => {
                     setIsSubmitting(false);
                 }
@@ -652,6 +685,10 @@ export default function SalesPurchaseIndex({
                 preserveState: true,
                 onSuccess: () => {
                     setIsAddModalOpen(false);
+                },
+                onError: (errs) => {
+                    const first = Object.values(errs)[0];
+                    setPurchaseError(typeof first === 'string' ? first : 'Validation error occurred.');
                 },
                 onFinish: () => {
                     setIsSubmitting(false);
@@ -682,9 +719,9 @@ export default function SalesPurchaseIndex({
         const companyName = (settings?.company_name || 'WINZELLE').replace(/\s+STORE$/i, '').trim();
         const exportData = sortedData.map(item => ({
             date: item.date,
-            provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
+            provider: item.distributor?.name || (item as any).distributor_name || selectedDistributor?.name || 'N/A',
             quantity: Number(item.quantity) || 0,
-            product_name: item.product?.name || 'Item',
+            product_name: (item as any).variant?.variant_name || (item as any).product_name || item.product?.name || 'Item',
             purchase_price: Number(item.purchase_price) || 0,
             total_purchase: Number(item.total_purchase) || 0,
             dealing_price: Number(item.dealing_price) || 0,
@@ -703,9 +740,9 @@ export default function SalesPurchaseIndex({
         const companyName = (settings?.company_name || 'WINZELLE').replace(/\s+STORE$/i, '').trim();
         const exportData = sortedData.map(item => ({
             date: item.date,
-            provider: item.distributor?.name || selectedDistributor?.name || 'N/A',
+            provider: item.distributor?.name || (item as any).distributor_name || selectedDistributor?.name || 'N/A',
             quantity: Number(item.quantity) || 0,
-            product_name: item.product?.name || 'Item',
+            product_name: (item as any).variant?.variant_name || (item as any).product_name || item.product?.name || 'Item',
             purchase_price: Number(item.purchase_price) || 0,
             total_purchase: Number(item.total_purchase) || 0,
             dealing_price: Number(item.dealing_price) || 0,
@@ -1145,7 +1182,7 @@ export default function SalesPurchaseIndex({
                             <button
                                 type="button"
                                 onClick={handleExportExcel}
-                                disabled={purchases.length === 0}
+                                disabled={totalItems === 0}
                                 className="inline-flex items-center space-x-2 px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-semibold text-xs rounded-xl transition border border-emerald-500/40 shadow-sm"
                                 title="Export formatted spreadsheet to Excel (.xlsx) matching template"
                             >
@@ -1156,7 +1193,7 @@ export default function SalesPurchaseIndex({
                             <button
                                 type="button"
                                 onClick={handleExportCSV}
-                                disabled={purchases.length === 0}
+                                disabled={totalItems === 0}
                                 className="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-semibold text-xs rounded-xl transition border border-slate-700 shadow-sm"
                                 title="Export currently filtered spreadsheet to CSV matching template"
                             >
@@ -1212,7 +1249,7 @@ export default function SalesPurchaseIndex({
                                             </td>
                                         </tr>
                                     ) : (
-                                        paginatedData.map((item, idx) => (
+                                        displayedData.map((item: Purchase, idx: number) => (
                                             <tr
                                                 key={item.id}
                                                 className={`hover:bg-slate-900/90 transition-colors ${idx % 2 === 0 ? 'bg-slate-950' : 'bg-slate-900/40'
@@ -1222,13 +1259,13 @@ export default function SalesPurchaseIndex({
                                                     {formatDateDisplay(item.date)}
                                                 </td>
                                                 <td className="py-2.5 px-3 font-sans font-bold text-white border-r border-slate-800 whitespace-nowrap">
-                                                    {item.distributor?.name || selectedDistributor?.name || 'N/A'}
+                                                    {item.distributor?.name || (item as any).distributor_name || selectedDistributor?.name || 'N/A'}
                                                 </td>
                                                 <td className="py-2.5 px-3 text-right font-bold text-amber-300 border-r border-slate-800">
                                                     {item.quantity}
                                                 </td>
                                                 <td className="py-2.5 px-3 font-sans font-medium text-slate-100 border-r border-slate-800 whitespace-nowrap">
-                                                    {item.product?.name || 'Item'}
+                                                    {(item as any).variant?.variant_name || (item as any).product_name || item.product?.name || 'Item'}
                                                 </td>
                                                 <td className="py-2.5 px-3 text-right text-slate-300 border-r border-slate-800">
                                                     {formatCurrency(Number(item.purchase_price))}
@@ -1279,7 +1316,7 @@ export default function SalesPurchaseIndex({
                                     )}
                                 </tbody>
                                 {/* Template Excel Totals Row in Table Footer */}
-                                {purchases.length > 0 && (
+                                {totalItems > 0 && (
                                     <tfoot className="border-t-2 border-emerald-500 bg-slate-950 text-white font-mono font-bold text-[11px]">
                                         <tr>
                                             <td colSpan={2} className="py-3 px-3 text-right font-sans uppercase tracking-wider text-slate-400 border-r border-slate-800">
@@ -1309,22 +1346,79 @@ export default function SalesPurchaseIndex({
                             </table>
                         </div>
 
-                        {/* Pagination Bar */}
-                        <TablePagination
-                            currentPage={currentPage}
-                            totalPages={totalPages}
-                            pageSize={pageSize}
-                            totalItems={totalItems}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
+                        {/* TEASER FOOTER (When collapsed to 3 rows) */}
+                        {!isTableExpanded && !searchQuery.trim() && totalItems > 3 ? (
+                            <div className="relative overflow-hidden border-t border-slate-800 bg-gradient-to-b from-slate-950/80 via-slate-900 to-slate-950 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-inner">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span className="text-xs text-slate-300 font-medium">
+                                        Teaser preview: Showing <strong className="text-white font-bold">top 3</strong> of <strong className="text-emerald-400 font-mono font-bold">{totalItems}</strong> purchase transactions
+                                    </span>
+                                    <span className="hidden md:inline-block text-[11px] bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-full border border-slate-700">
+                                        +{totalItems - 3} more records available
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFullTableModalOpen(true)}
+                                        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/50 transition active:scale-95"
+                                    >
+                                        <Maximize2 className="h-3.5 w-3.5" />
+                                        <span>View Full Table in Modal ({totalItems})</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTableExpanded(true)}
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition"
+                                    >
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                        <span>Expand Inline</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            /* PAGINATION BAR (When expanded or searched) */
+                            <div className="border-t border-slate-800 bg-slate-950/40 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-slate-300">
+                                        Viewing all transactions inline ({totalItems} items)
+                                    </span>
+                                    {!searchQuery.trim() && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsTableExpanded(false)}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-semibold transition"
+                                        >
+                                            <ChevronUp className="h-3 w-3" />
+                                            <span>Collapse to Teaser (3 rows)</span>
+                                        </button>
+                                    )}
+                                </div>
+                                <TablePagination
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    pageSize={pageSize}
+                                    totalItems={totalItems}
+                                    startIndex={startIndex}
+                                    endIndex={endIndex}
+                                    onPageChange={setPage}
+                                    onPageSizeChange={setPageSize}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
             {/* CUSTOMIZE DISTRIBUTORS SELECTION MODAL */}
             {isDistributorModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div 
+                    onClick={(e) => { if (e.target === e.currentTarget) setIsDistributorModalOpen(false); }}
+                    className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+                >
                     <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                             <div className="flex items-center space-x-2">
@@ -1332,6 +1426,7 @@ export default function SalesPurchaseIndex({
                                 <h3 className="text-base font-bold text-white">Customize Distributors Display</h3>
                             </div>
                             <button
+                                type="button"
                                 onClick={() => setIsDistributorModalOpen(false)}
                                 className="text-slate-400 hover:text-white p-1 rounded-lg"
                             >
@@ -1428,7 +1523,10 @@ export default function SalesPurchaseIndex({
 
             {/* ADD / EDIT PURCHASE MODAL */}
             {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div 
+                    onClick={(e) => { if (e.target === e.currentTarget) setIsAddModalOpen(false); }}
+                    className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+                >
                     <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1436,12 +1534,20 @@ export default function SalesPurchaseIndex({
                                 <span>{editingPurchase ? 'Edit Purchase Entry' : 'Record New Purchase'}</span>
                             </h3>
                             <button
+                                type="button"
                                 onClick={() => setIsAddModalOpen(false)}
                                 className="text-slate-400 hover:text-white p-1 rounded-lg"
                             >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
+
+                        {purchaseError && (
+                            <div className="mb-4 p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
+                                <span>{purchaseError}</span>
+                            </div>
+                        )}
 
                         <form onSubmit={handleSubmitPurchase} className="space-y-4">
 
@@ -1513,11 +1619,15 @@ export default function SalesPurchaseIndex({
                                             className="w-full bg-slate-950 border border-emerald-500/60 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
                                         >
                                             <option value="">-- Select Product --</option>
-                                            {availableProductsForForm.map(p => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.name} (Base Cost: ₱{p.purchase_price})
-                                                </option>
-                                            ))}
+                                            {availableProductsForForm.map(p => {
+                                                const unitStr = p.size_value ? ` • ${p.size_value}${p.unit?.symbol || ''}` : (p.unit?.symbol ? ` • ${p.unit.symbol}` : '');
+                                                const packStr = p.packaging ? ` (${p.packaging})` : '';
+                                                return (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name}{unitStr}{packStr} (Base Cost: ₱{p.purchase_price})
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                     </div>
                                 )}
@@ -1637,7 +1747,10 @@ export default function SalesPurchaseIndex({
             )}
             {/* DATE FILTER MODAL CALENDAR (Single Date, Per Month, Date Range) */}
             {isDateModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div 
+                    onClick={(e) => { if (e.target === e.currentTarget) setIsDateModalOpen(false); }}
+                    className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+                >
                     <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
 
                         {/* Modal Header */}
@@ -1995,6 +2108,166 @@ export default function SalesPurchaseIndex({
                     }
                 }}
             />
+        
+            {/* ======================================================== */}
+            {/* FULL SPREADSHEET EXPLORER MODAL                          */}
+            {/* ======================================================== */}
+            {isFullTableModalOpen && (
+                <div className="fixed inset-0 z-[55] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-7xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between gap-4 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                                    <Maximize2 className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                        <span>Sales & Purchases Spreadsheet — Full Explorer</span>
+                                        <span className="text-xs font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                                            {totalItems} Records
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-400">Full desktop spreadsheet view with live sorting, date filtering, and calculations</p>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsFullTableModalOpen(false)}
+                                className="h-9 w-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition border border-slate-700"
+                                title="Close Full Table (ESC)"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body: Scrollable Table */}
+                        <div className="flex-1 overflow-auto bg-slate-900/40">
+                            <table className="w-full text-left border-collapse font-sans text-xs">
+                                <thead className="sticky top-0 z-10">
+                                    <tr className="bg-emerald-800 text-emerald-50 uppercase tracking-wider font-bold border-b border-emerald-600 text-[11px] shadow-sm">
+                                        <SortableHeader label="DATE" sortKey="date" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PROVIDER" sortKey="distributor.name" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="QUANTITY" sortKey="quantity" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PRODUCT NAME" sortKey="product.name" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="PURCHASE PRICE" sortKey="purchase_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="TOTAL PURCHASE" sortKey="total_purchase" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="DEALING PRICE" sortKey="dealing_price" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="DISCOUNT" sortKey="discount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label="GROSS AMOUNT" sortKey="gross_amount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-800 hover:bg-emerald-750 text-emerald-50" />
+                                        <SortableHeader label={`${defaultVatPercentage}% VAT`} sortKey="vat_adjusted_amount" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-900/90 hover:bg-emerald-900 text-teal-100" />
+                                        <SortableHeader label="NET PROFIT" sortKey="net_profit" currentSortKey={sortConfig?.key || null} currentDirection={sortConfig?.direction || 'asc'} onSort={requestSort} align="right" className="border-r border-emerald-700/60 bg-emerald-950 text-emerald-300 hover:bg-emerald-900" />
+                                        <th className="py-3 px-2 text-center whitespace-nowrap">ACTIONS</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/80 bg-slate-950 font-mono text-[11px]">
+                                    {paginatedData.map((item, idx) => (
+                                        <tr
+                                            key={item.id}
+                                            className={`hover:bg-slate-900/90 transition-colors ${idx % 2 === 0 ? 'bg-slate-950' : 'bg-slate-900/40'}`}
+                                        >
+                                            <td className="py-2.5 px-3 font-sans text-slate-300 border-r border-slate-800 whitespace-nowrap">
+                                                {formatDateDisplay(item.date)}
+                                            </td>
+                                            <td className="py-2.5 px-3 font-sans font-bold text-white border-r border-slate-800 whitespace-nowrap">
+                                                {item.distributor?.name || (item as any).distributor_name || selectedDistributor?.name || 'N/A'}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-bold text-amber-300 border-r border-slate-800">
+                                                {item.quantity}
+                                            </td>
+                                            <td className="py-2.5 px-3 font-sans border-r border-slate-800">
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold text-white leading-tight">
+                                                        {(item as any).variant?.variant_name || (item as any).product_name || item.product?.name || 'N/A'}
+                                                    </span>
+                                                    {(item as any).variant?.sku ? (
+                                                        <span className="text-[10px] text-emerald-400 font-mono mt-0.5">
+                                                            {(item as any).variant.sku}
+                                                        </span>
+                                                    ) : (item.product?.size_value || item.product?.unit) && (
+                                                        <span className="text-[10px] text-emerald-400 font-mono mt-0.5">
+                                                            {item.product?.size_value ? `${item.product.size_value}${item.product?.unit?.symbol || ''}` : (item.product?.unit?.symbol || '')}
+                                                            {item.product?.packaging ? ` (${item.product.packaging})` : ''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right text-slate-300 border-r border-slate-800">
+                                                {formatCurrency(item.purchase_price)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-semibold text-white border-r border-slate-800">
+                                                {formatCurrency(item.total_purchase)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right text-slate-300 border-r border-slate-800">
+                                                {formatCurrency(item.dealing_price)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right text-slate-400 border-r border-slate-800">
+                                                {formatCurrency(item.discount)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right text-slate-200 border-r border-slate-800">
+                                                {formatCurrency(item.gross_amount)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right text-teal-300 border-r border-slate-800">
+                                                {formatCurrency(item.vat_adjusted_amount)}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-bold text-emerald-400 border-r border-slate-800">
+                                                {formatCurrency(item.net_profit)}
+                                            </td>
+                                            <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                                                {canManage ? (
+                                                    <div className="flex items-center justify-center space-x-1">
+                                                        <button
+                                                            onClick={() => openEditModal(item)}
+                                                            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 rounded transition"
+                                                            title="Edit Transaction"
+                                                        >
+                                                            <Edit2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        {canDelete && (
+                                                            <button
+                                                                onClick={() => { setPurchaseToDelete(item.id); setDeleteModalOpen(true); }}
+                                                                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded transition"
+                                                                title="Delete Transaction"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-500 italic">View Only</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Modal Footer: Full Pagination & Close */}
+                        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsFullTableModalOpen(false)}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition"
+                            >
+                                Back to Dashboard
+                            </button>
+                            <TablePagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                pageSize={pageSize}
+                                totalItems={totalItems}
+                                startIndex={startIndex}
+                                endIndex={endIndex}
+                                onPageChange={setPage}
+                                onPageSizeChange={setPageSize}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </MainLayout>
     );
 }

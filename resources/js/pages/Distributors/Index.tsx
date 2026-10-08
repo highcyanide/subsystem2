@@ -27,16 +27,24 @@ import {
     Package,
     ExternalLink,
     RotateCcw,
-    Archive
+    Maximize2,
+    ChevronUp,
+    ChevronDown,
+    Archive,
+    CheckSquare,
+    ChevronLeft,
+    ChevronRight,
+    Check,
+    Sparkles
 } from 'lucide-react';
 
 interface Distributor {
     id: number;
     name: string;
     contact_number: string;
-    email?: string;
-    address?: string;
-    logo?: string;
+    email?: string | null;
+    address?: string | null;
+    logo?: string | null;
     is_favorite: boolean;
     products_count?: number;
     created_at?: string;
@@ -84,7 +92,29 @@ export default function DistributorsIndex({
     const [logo, setLogo] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [modalError, setModalError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+    const [selectedDistributorIds, setSelectedDistributorIds] = useState<number[]>([]);
+    const [isViewAllModalOpen, setIsViewAllModalOpen] = useState(false);
+    const [modalDistSearch, setModalDistSearch] = useState('');
+    const [favPage, setFavPage] = useState(0);
+    const [otherPage, setOtherPage] = useState(0);
+
+    // Carousel deck pagination: 5 distributor cards per page
+    const distCardsPerPage = 5;
+    const [distCardPage, setDistCardPage] = useState(0);
+    const distCardPagesCount = Math.max(1, Math.ceil(distributors.length / distCardsPerPage));
+    const pagedDistributors = useMemo(() => {
+        const start = distCardPage * distCardsPerPage;
+        return distributors.slice(start, start + distCardsPerPage);
+    }, [distributors, distCardPage]);
+
+    const filteredModalDistributors = useMemo(() => {
+        if (!modalDistSearch.trim()) return distributors;
+        const q = modalDistSearch.toLowerCase();
+        return distributors.filter(d => d.name.toLowerCase().includes(q) || (d.email && d.email.toLowerCase().includes(q)));
+    }, [distributors, modalDistSearch]);
+
 
     // Real-time validation: duplicate name check
     const duplicateError = useMemo(() => {
@@ -97,6 +127,21 @@ export default function DistributorsIndex({
     }, [name, distributors, editingDistributor]);
 
     // Live debounced search
+    
+    const toggleDistributorSelect = (id: number, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setSelectedDistributorIds(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const handleViewSelectedProducts = () => {
+        if (selectedDistributorIds.length === 0) return;
+        router.get('/products', {
+            distributor_ids: selectedDistributorIds.join(',')
+        });
+    };
+
     const handleSearch = (value: string) => {
         setSearchQuery(value);
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -144,6 +189,7 @@ export default function DistributorsIndex({
         startIndex,
         endIndex,
         paginatedData,
+        sortedData,
     } = useTablePaginationAndSort<Distributor>({
         data: distributors,
         initialSortKey: 'name',
@@ -151,8 +197,20 @@ export default function DistributorsIndex({
         initialPageSize: 12,
     });
 
+    const [isTableExpanded, setIsTableExpanded] = useState(false);
+    const [isFullTableModalOpen, setIsFullTableModalOpen] = useState(false);
+
+    // 1-3 Rows Snapshot dataset when collapsed and no search
+    const displayedTableData = useMemo(() => {
+        if (!isTableExpanded && !searchQuery.trim()) {
+            return sortedData.slice(0, 3);
+        }
+        return paginatedData;
+    }, [isTableExpanded, searchQuery, sortedData, paginatedData]);
+
     const openAddModal = () => {
         setEditingDistributor(null);
+        setModalError(null);
         setName('');
         setContactNumber('');
         setEmail('');
@@ -164,6 +222,7 @@ export default function DistributorsIndex({
 
     const openEditModal = (dist: Distributor) => {
         setEditingDistributor(dist);
+        setModalError(null);
         setName(dist.name);
         setContactNumber(dist.contact_number);
         setEmail(dist.email || '');
@@ -251,8 +310,13 @@ export default function DistributorsIndex({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (processing || duplicateError || !name.trim() || !contactNumber.trim()) return;
+        if (processing || duplicateError || !name.trim() || !contactNumber.trim()) {
+            if (!name.trim()) setModalError('Distributor name is required.');
+            else if (!contactNumber.trim()) setModalError('Contact number is required.');
+            return;
+        }
 
+        setModalError(null);
         setProcessing(true);
         const payload = {
             name: name.trim(),
@@ -277,6 +341,10 @@ export default function DistributorsIndex({
                         setReturnToViewAfterEdit(false);
                     }
                 },
+                onError: (errs) => {
+                    const first = Object.values(errs)[0];
+                    setModalError(typeof first === 'string' ? first : 'Validation error occurred.');
+                },
                 onFinish: () => setProcessing(false),
             });
         } else {
@@ -284,6 +352,10 @@ export default function DistributorsIndex({
                 preserveScroll: true,
                 preserveState: true,
                 onSuccess: () => setIsModalOpen(false),
+                onError: (errs) => {
+                    const first = Object.values(errs)[0];
+                    setModalError(typeof first === 'string' ? first : 'Validation error occurred.');
+                },
                 onFinish: () => setProcessing(false),
             });
         }
@@ -375,6 +447,7 @@ export default function DistributorsIndex({
                     </div>
 
                     {/* Live Search */}
+                    
                     <div className="relative">
                         <input
                             type="text"
@@ -396,6 +469,119 @@ export default function DistributorsIndex({
                 </div>
             </div>
 
+            {/* ======================================================== */}
+            {/* DISTRIBUTOR SELECTOR: CAROUSEL PAGING + CHECKMARK MULTI  */}
+            {/* ======================================================== */}
+            {!showArchived && distributors.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl mb-6 shadow-xl">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-emerald-400" />
+                            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                                View Products Filter by Distributor:
+                            </label>
+                            {selectedDistributorIds.length > 0 && (
+                                <span className="text-[11px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                                    {selectedDistributorIds.length} Selected
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                            {/* View All & Checkmark Modal Button */}
+                            <button
+                                type="button"
+                                onClick={() => setIsViewAllModalOpen(true)}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
+                            >
+                                <CheckSquare className="h-3.5 w-3.5" />
+                                <span>View All & Checkmarks</span>
+                            </button>
+
+                            {/* Next & Prev Carousel Controls */}
+                            {distributors.length > distCardsPerPage && (
+                                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl p-0.5">
+                                    <button
+                                        type="button"
+                                        disabled={distCardPage === 0}
+                                        onClick={() => setDistCardPage(p => Math.max(0, p - 1))}
+                                        className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg transition"
+                                        title="Previous Distributors"
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </button>
+                                    <span className="text-xs text-slate-400 font-mono px-1.5">
+                                        {distCardPage + 1} / {distCardPagesCount}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={distCardPage >= distCardPagesCount - 1}
+                                        onClick={() => setDistCardPage(p => Math.min(distCardPagesCount - 1, p + 1))}
+                                        className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg transition"
+                                        title="Next Distributors"
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Distributor Cards Deck (5 at a time) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        {pagedDistributors.map((d) => {
+                            const isChecked = selectedDistributorIds.includes(d.id);
+                            return (
+                                <div
+                                    key={d.id}
+                                    onClick={() => toggleDistributorSelect(d.id)}
+                                    className={`p-3 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between select-none relative group ${
+                                        isChecked
+                                            ? 'bg-emerald-950/60 border-emerald-500 shadow-md shadow-emerald-950/50'
+                                            : 'bg-slate-950 border-slate-800 hover:border-slate-700 hover:bg-slate-850/60'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-1 mb-2">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleDistributorSelect(d.id);
+                                            }}
+                                            className={`h-4 w-4 rounded flex items-center justify-center border transition ${
+                                                isChecked 
+                                                    ? 'bg-emerald-600 border-emerald-500 text-white' 
+                                                    : 'border-slate-700 bg-slate-900 text-transparent hover:border-slate-500'
+                                            }`}
+                                        >
+                                            <Check className="h-3 w-3 stroke-[3]" />
+                                        </button>
+                                        {typeof d.products_count !== 'undefined' && (
+                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                {d.products_count} prod
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        {d.logo ? (
+                                            <img src={d.logo} alt={d.name} className="h-6 w-6 rounded object-contain bg-white/10 p-0.5 shrink-0" />
+                                        ) : (
+                                            <div className="h-6 w-6 rounded bg-slate-800 text-emerald-400 font-bold text-[11px] flex items-center justify-center shrink-0 border border-slate-700">
+                                                {d.name.charAt(0).toUpperCase()}
+                                            </div>
+                                        )}
+                                        <span className={`text-xs font-bold truncate block ${isChecked ? 'text-white' : 'text-slate-300'}`}>
+                                            {d.name}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Archive Notice Banner */}
             {showArchived && (
                 <div className="mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200 text-xs">
@@ -416,18 +602,55 @@ export default function DistributorsIndex({
             {viewMode === 'cards' ? (
                 /* Distributor Cards Grid */
                 <div className="space-y-8">
+
                     {/* Favorite Section */}
                     <div>
-                        <div className="flex items-center space-x-2 mb-4">
-                            <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-                            <h2 className="text-base font-bold text-white uppercase tracking-wider">Favorite Distributors</h2>
-                            <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-medium">
-                                {favorites.length} Favorites
-                            </span>
-                        </div>
+                        {(() => {
+                            const favsPerPage = 4;
+                            const favPagesCount = Math.max(1, Math.ceil(favorites.length / favsPerPage));
+                            const pagedFavs = favorites.slice(favPage * favsPerPage, (favPage + 1) * favsPerPage);
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                            {favorites.map((dist) => (
+                            return (
+                                <>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center space-x-2">
+                                            <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+                                            <h2 className="text-base font-bold text-white uppercase tracking-wider">Favorite Distributors</h2>
+                                            <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-medium">
+                                                {favorites.length} Favorites
+                                            </span>
+                                        </div>
+
+                                        {favorites.length > favsPerPage && (
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    disabled={favPage === 0}
+                                                    onClick={() => setFavPage(p => Math.max(0, p - 1))}
+                                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded-lg text-slate-300 transition"
+                                                    title="Previous"
+                                                >
+                                                    <ChevronLeft className="h-4 w-4" />
+                                                </button>
+                                                <span className="text-xs text-slate-400 font-mono px-1">
+                                                    Page {favPage + 1} of {favPagesCount}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    disabled={favPage >= favPagesCount - 1}
+                                                    onClick={() => setFavPage(p => Math.min(favPagesCount - 1, p + 1))}
+                                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded-lg text-slate-300 transition"
+                                                    title="Next"
+                                                >
+                                                    <ChevronRight className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                                        {pagedFavs.map((dist) => (
+
                                 <div
                                     key={dist.id}
                                     onClick={() => openViewModal(dist)}
@@ -435,10 +658,24 @@ export default function DistributorsIndex({
                                 >
                                     {/* Top row: Favorite indicator & Star button */}
                                     <div className="w-full flex items-center justify-between">
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
-                                            <Star className="h-3 w-3 fill-amber-400" />
-                                            <span>Favorite</span>
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => toggleDistributorSelect(dist.id, e)}
+                                                className={`h-6 w-6 rounded-md border flex items-center justify-center transition ${
+                                                    selectedDistributorIds.includes(dist.id)
+                                                        ? 'bg-emerald-600 border-emerald-400 text-white'
+                                                        : 'bg-slate-950/80 border-slate-700 text-slate-500 hover:border-slate-500'
+                                                }`}
+                                                title={selectedDistributorIds.includes(dist.id) ? 'Deselect company' : 'Select with checkmark'}
+                                            >
+                                                {selectedDistributorIds.includes(dist.id) && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                                            </button>
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                                                <Star className="h-3 w-3 fill-amber-400" />
+                                                <span>Favorite</span>
+                                            </span>
+                                        </div>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -488,44 +725,100 @@ export default function DistributorsIndex({
                                 </div>
                             ))}
                         </div>
+                                </>
+                            );
+                        })()}
                     </div>
 
-                    {/* All / Other Distributors Section */}
-                    <div>
-                        <div className="flex items-center space-x-2 mb-4">
-                            <Building2 className="h-5 w-5 text-slate-400" />
-                            <h2 className="text-base font-bold text-white uppercase tracking-wider">Other Distributors</h2>
-                            <span className="text-xs text-slate-400">({others.length} companies)</span>
-                        </div>
+                                        {/* All / Other Distributors Section with Next & Prev */}
+                      <div>
+                          {(() => {
+                              const othersPerPage = 8;
+                              const otherPagesCount = Math.max(1, Math.ceil(others.length / othersPerPage));
+                              const pagedOthers = others.slice(otherPage * othersPerPage, (otherPage + 1) * othersPerPage);
 
-                        {others.length === 0 ? (
-                            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center text-slate-400 text-sm">
-                                No other distributors. All distributors are in your Favorites section!
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                                {others.map((dist) => (
-                                    <div
-                                        key={dist.id}
-                                        onClick={() => openViewModal(dist)}
-                                        className="group relative bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-5 shadow-lg hover:shadow-emerald-950/40 hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-between text-center cursor-pointer h-72 select-none"
-                                    >
-                                        {/* Top row: Status indicator & Star button */}
-                                        <div className="w-full flex items-center justify-between">
-                                            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
-                                                Distributor
-                                            </span>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleToggleFavorite(dist.id);
-                                                }}
-                                                className="p-1.5 text-slate-500 hover:text-amber-400 hover:scale-110 transition rounded-lg"
-                                                title="Mark as favorite"
-                                            >
-                                                <Star className="h-4 w-4" />
-                                            </button>
-                                        </div>
+                              return (
+                                  <>
+                                      <div className="flex items-center justify-between mb-4">
+                                          <div className="flex items-center space-x-2">
+                                              <Building2 className="h-5 w-5 text-slate-400" />
+                                              <h2 className="text-base font-bold text-white uppercase tracking-wider">Other Distributors</h2>
+                                              <span className="text-xs text-slate-400">({others.length} Distributors)</span>
+                                          </div>
+
+                                          {others.length > othersPerPage && (
+                                              <div className="flex items-center gap-1.5">
+                                                  <button
+                                                      type="button"
+                                                      disabled={otherPage === 0}
+                                                      onClick={() => setOtherPage(p => Math.max(0, p - 1))}
+                                                      className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded-lg text-slate-300 transition"
+                                                      title="Previous 8 distributors"
+                                                  >
+                                                      <ChevronLeft className="h-4 w-4" />
+                                                  </button>
+                                                  <span className="text-xs text-slate-400 font-mono px-1">
+                                                      Page {otherPage + 1} of {otherPagesCount}
+                                                  </span>
+                                                  <button
+                                                      type="button"
+                                                      disabled={otherPage >= otherPagesCount - 1}
+                                                      onClick={() => setOtherPage(p => Math.min(otherPagesCount - 1, p + 1))}
+                                                      className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded-lg text-slate-300 transition"
+                                                      title="Next 8 distributors"
+                                                  >
+                                                      <ChevronRight className="h-4 w-4" />
+                                                  </button>
+                                              </div>
+                                          )}
+                                      </div>
+
+                                      {others.length === 0 ? (
+                                          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center text-slate-400 text-sm">
+                                              No other distributors. All distributors are in your Favorites section!
+                                          </div>
+                                      ) : (
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                                              {pagedOthers.map((dist) => (
+                                                  <div
+                                                      key={dist.id}
+                                                      onClick={() => openViewModal(dist)}
+                                                      className={`group relative bg-slate-900 border rounded-2xl p-5 shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-between text-center cursor-pointer h-72 select-none ${
+                                                          selectedDistributorIds.includes(dist.id)
+                                                              ? 'border-emerald-500 shadow-emerald-950/50 bg-emerald-950/20'
+                                                              : 'border-slate-800 hover:border-emerald-500/60'
+                                                      }`}
+                                                  >
+                                                      {/* Top row: Checkmark selection & Star button */}
+                                                      <div className="w-full flex items-center justify-between">
+                                                          <div className="flex items-center gap-1.5">
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={(e) => toggleDistributorSelect(dist.id, e)}
+                                                                  className={`h-6 w-6 rounded-md border flex items-center justify-center transition ${
+                                                                      selectedDistributorIds.includes(dist.id)
+                                                                          ? 'bg-emerald-600 border-emerald-400 text-white'
+                                                                          : 'bg-slate-950/80 border-slate-700 text-slate-500 hover:border-slate-500'
+                                                                  }`}
+                                                                  title={selectedDistributorIds.includes(dist.id) ? 'Deselect company' : 'Select with checkmark'}
+                                                              >
+                                                                  {selectedDistributorIds.includes(dist.id) && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                                                              </button>
+                                                              <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+                                                                  Distributor
+                                                              </span>
+                                                          </div>
+                                                          <button
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  handleToggleFavorite(dist.id);
+                                                              }}
+                                                              className="p-1.5 text-slate-500 hover:text-amber-400 hover:scale-110 transition rounded-lg"
+                                                              title="Mark as favorite"
+                                                          >
+                                                              <Star className="h-4 w-4" />
+                                                          </button>
+                                                      </div>
 
                                         {/* Center: BIGGER LOGO & NAME */}
                                         <div className="flex-1 flex flex-col items-center justify-center gap-3 w-full my-1">
@@ -565,7 +858,10 @@ export default function DistributorsIndex({
                                 ))}
                             </div>
                         )}
-                    </div>
+                                  </>
+                              );
+                          })()} {/* End pagedOthers */}
+                      </div>
                 </div>
             ) : (
                 /* Directory Table View with Full Sorting and Pagination */
@@ -592,7 +888,7 @@ export default function DistributorsIndex({
                                         </td>
                                     </tr>
                                 ) : (
-                                    paginatedData.map((dist) => (
+                                    displayedTableData.map((dist: Distributor) => (
                                         <tr key={dist.id} className="hover:bg-slate-850/80 transition-colors">
                                             <td className="py-2.5 px-3 text-center">
                                                 {dist.logo ? (
@@ -684,22 +980,75 @@ export default function DistributorsIndex({
                         </table>
                     </div>
 
-                    <TablePagination
-                        currentPage={currentPage}
-                        totalPages={totalPages}
-                        totalItems={totalItems}
-                        startIndex={startIndex}
-                        endIndex={endIndex}
-                        pageSize={pageSize}
-                        onPageChange={setCurrentPage}
-                        onPageSizeChange={setPageSize}
-                    />
+                    {/* TEASER FOOTER (When collapsed to 3 rows) */}
+                    {!isTableExpanded && !searchQuery.trim() && totalItems > 3 ? (
+                        <div className="relative overflow-hidden border-t border-slate-800 bg-gradient-to-b from-slate-950/80 via-slate-900 to-slate-950 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-inner">
+                            <div className="flex items-center gap-2.5">
+                                <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span className="text-xs text-slate-300 font-medium">
+                                    Teaser preview: Showing <strong className="text-white font-bold">top 3</strong> of <strong className="text-emerald-400 font-mono font-bold">{totalItems}</strong> distributors
+                                </span>
+                                <span className="hidden md:inline-block text-[11px] bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-full border border-slate-700">
+                                    +{totalItems - 3} more records available
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsFullTableModalOpen(true)}
+                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/50 transition active:scale-95"
+                                >
+                                    <Maximize2 className="h-3.5 w-3.5" />
+                                    <span>View Full Directory in Modal ({totalItems})</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTableExpanded(true)}
+                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition"
+                                >
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                    <span>Expand Inline</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* PAGINATION BAR (When expanded or searched) */
+                        <div className="border-t border-slate-800 bg-slate-950/40 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-300">
+                                    Viewing all distributors inline ({totalItems} items)
+                                </span>
+                                {!searchQuery.trim() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTableExpanded(false)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-semibold transition"
+                                    >
+                                        <ChevronUp className="h-3 w-3" />
+                                        <span>Collapse to Teaser (3 rows)</span>
+                                    </button>
+                                )}
+                            </div>
+                            <TablePagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                totalItems={totalItems}
+                                startIndex={startIndex}
+                                endIndex={endIndex}
+                                pageSize={pageSize}
+                                onPageChange={setCurrentPage}
+                                onPageSizeChange={setPageSize}
+                            />
+                        </div>
+                    )}
                 </div>
             )}
 
             {/* ADD / EDIT DISTRIBUTOR MODAL WITH LOGO UPLOAD & REAL-TIME VALIDATION */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[75] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -710,6 +1059,13 @@ export default function DistributorsIndex({
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
+
+                        {modalError && (
+                            <div className="mb-4 p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                                <span>{modalError}</span>
+                            </div>
+                        )}
 
                         {duplicateError && (
                             <div className="mb-4 p-3 rounded-xl bg-amber-950/60 border border-amber-500/50 text-amber-300 text-xs flex items-center gap-2">
@@ -778,8 +1134,8 @@ export default function DistributorsIndex({
                                     required
                                     placeholder="e.g. PEPSI COLA PRODUCTS PHILS"
                                     value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition ${
+                                    onChange={(e) => setName(e.target.value.toUpperCase())}
+                                    className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs text-white uppercase focus:outline-none transition ${
                                         duplicateError ? 'border-amber-500 ring-1 ring-amber-500/30' : 'border-slate-700 focus:border-emerald-500'
                                     }`}
                                 />
@@ -859,7 +1215,7 @@ export default function DistributorsIndex({
 
             {/* DISTRIBUTOR FULL DETAILS MODAL */}
             {viewingDistributor && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[65] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         {/* Modal Header */}
                         <div className="flex items-start justify-between border-b border-slate-800 pb-4 mb-5">
@@ -992,6 +1348,7 @@ export default function DistributorsIndex({
                                     <>
                                         {canManage && (
                                             <button
+                                                type="button"
                                                 onClick={handleEditFromView}
                                                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5"
                                             >
@@ -1001,6 +1358,7 @@ export default function DistributorsIndex({
                                         )}
                                         {canDelete && (
                                             <button
+                                                type="button"
                                                 onClick={handleDeleteFromView}
                                                 className="px-4 py-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs font-semibold rounded-xl border border-rose-800/60 transition flex items-center gap-1.5"
                                             >
@@ -1011,6 +1369,7 @@ export default function DistributorsIndex({
                                     </>
                                 )}
                                 <button
+                                    type="button"
                                     onClick={closeViewModal}
                                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition"
                                 >
@@ -1036,6 +1395,314 @@ export default function DistributorsIndex({
                     }
                 }}
             />
+
+            {/* View All Modal */}
+            {isViewAllModalOpen && (
+                <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl p-6 relative max-h-[85vh] flex flex-col">
+                        <button
+                            type="button"
+                            onClick={() => setIsViewAllModalOpen(false)}
+                            className="absolute right-4 top-4 text-slate-400 hover:text-white"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+
+                        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-800">
+                            <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-white">All Distributors Directory & Checkmarks</h3>
+                                <p className="text-xs text-slate-400">Select distributors to compare or view shared product catalogs</p>
+                            </div>
+                        </div>
+
+                        {/* Search in modal */}
+                        <div className="relative mb-3">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search distributors in modal..."
+                                value={modalDistSearch}
+                                onChange={(e) => setModalDistSearch(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                            />
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-800/80">
+                            {filteredModalDistributors.map(d => {
+                                const isChecked = selectedDistributorIds.includes(d.id);
+                                return (
+                                    <div key={d.id} className="py-3 flex items-center justify-between gap-3 hover:bg-slate-850/50 px-2 rounded-xl transition">
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                    setSelectedDistributorIds(prev => 
+                                                        prev.includes(d.id) ? prev.filter(id => id !== d.id) : [...prev, d.id]
+                                                    );
+                                                }}
+                                                className="rounded border-slate-700 bg-slate-950 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                                            />
+                                            <div>
+                                                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                                    <span>{d.name}</span>
+                                                    {d.is_favorite && (
+                                                        <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                                                    )}
+                                                </div>
+                                                <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-0.5">
+                                                    <span>Phone: {d.contact_number}</span>
+                                                    {d.email && <span>Email: {d.email}</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <Link
+                                                href={'/products?distributor_id=' + d.id}
+                                                className="text-xs bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 px-2.5 py-1 rounded-lg font-mono font-semibold transition"
+                                            >
+                                                {d.products_count || 0} Products &rarr;
+                                            </Link>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedDistributorIds(distributors.map(d => d.id))}
+                                    className="text-xs text-emerald-400 hover:underline font-semibold"
+                                >
+                                    Select All
+                                </button>
+                                <span className="text-slate-600">•</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedDistributorIds([])}
+                                    className="text-xs text-slate-400 hover:text-white"
+                                >
+                                    Clear All
+                                </button>
+                                <span className="text-slate-600">•</span>
+                                <span className="text-slate-400">
+                                    {selectedDistributorIds.length} selected
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {selectedDistributorIds.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsViewAllModalOpen(false);
+                                            handleViewSelectedProducts();
+                                        }}
+                                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-xl shadow-lg transition active:scale-95"
+                                    >
+                                        View Products ({selectedDistributorIds.length}) &rarr;
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setIsViewAllModalOpen(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl transition"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {/* Sticky Multi-Distributor Comparison Bar */}
+            {selectedDistributorIds.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-emerald-500/70 shadow-2xl shadow-emerald-950/90 rounded-2xl px-5 py-3.5 flex items-center gap-4 text-xs animate-in slide-in-from-bottom-4 duration-200">
+                    <div className="flex items-center gap-2">
+                        <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+                        <span className="text-white font-bold text-xs">
+                            {selectedDistributorIds.length} Distributor(s) Selected
+                        </span>
+                    </div>
+                    <div className="h-4 w-px bg-slate-700" />
+                    <button
+                        type="button"
+                        onClick={handleViewSelectedProducts}
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition active:scale-95"
+                    >
+                        <span>View Shared & Catalog Products ➔</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedDistributorIds([])}
+                        className="text-slate-400 hover:text-white text-xs underline font-semibold transition"
+                    >
+                        Clear
+                    </button>
+                </div>
+            )}
+
+        
+            {/* ======================================================== */}
+            {/* FULL DISTRIBUTORS DIRECTORY MODAL                        */}
+            {/* ======================================================== */}
+            {isFullTableModalOpen && (
+                <div className="fixed inset-0 z-[55] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-7xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between gap-4 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                                    <Maximize2 className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                        <span>Distributors Directory — Full Table Explorer</span>
+                                        <span className="text-xs font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                                            {totalItems} Distributors
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-400">Complete list of registered supplier partners with full contact details and product links</p>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsFullTableModalOpen(false)}
+                                className="h-9 w-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition border border-slate-700"
+                                title="Close Full Directory (ESC)"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body: Scrollable Table */}
+                        <div className="flex-1 overflow-auto bg-slate-900/40">
+                            <table className="w-full text-left border-collapse text-xs">
+                                <thead className="sticky top-0 z-10">
+                                    <tr className="bg-slate-950 text-slate-300 border-b border-slate-800 shadow-sm">
+                                        <th className="py-3 px-3 w-14 text-center font-bold uppercase tracking-wider text-[11px]">Logo</th>
+                                        <SortableHeader label="Company Name" sortKey="name" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+                                        <SortableHeader label="Products Count" sortKey="products_count" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} align="center" />
+                                        <SortableHeader label="Contact Number" sortKey="contact_number" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+                                        <SortableHeader label="Email Address" sortKey="email" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+                                        <th className="py-3 px-3 font-bold uppercase tracking-wider text-[11px]">Address</th>
+                                        <th className="py-3 px-3 text-center font-bold uppercase tracking-wider text-[11px]">Favorite</th>
+                                        <th className="py-3 px-3 text-center font-bold uppercase tracking-wider text-[11px]">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/80 bg-slate-900/60 font-sans">
+                                    {paginatedData.map((dist) => (
+                                        <tr key={dist.id} className="hover:bg-slate-850/80 transition-colors">
+                                            <td className="py-2.5 px-3 text-center">
+                                                {dist.logo ? (
+                                                    <img
+                                                        src={dist.logo}
+                                                        alt={dist.name}
+                                                        className="h-8 w-8 rounded-lg object-contain bg-slate-950/80 p-0.5 border border-slate-700 mx-auto"
+                                                    />
+                                                ) : (
+                                                    <div className="h-8 w-8 rounded-lg bg-emerald-950 text-emerald-300 font-bold text-xs flex items-center justify-center border border-emerald-500/40 mx-auto">
+                                                        {dist.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="py-2.5 px-3 font-bold text-white cursor-pointer hover:text-emerald-400 transition" onClick={() => openViewModal(dist)}>
+                                                {dist.name}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono font-semibold text-emerald-400">
+                                                <Link
+                                                    href={`/products?distributor_id=${dist.id}`}
+                                                    className="hover:underline"
+                                                    title="View products"
+                                                >
+                                                    {dist.products_count || 0}
+                                                </Link>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-300 font-mono">
+                                                {dist.contact_number}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-400">
+                                                {dist.email || '—'}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-400 max-w-xs truncate">
+                                                {dist.address || '—'}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center">
+                                                <button
+                                                    onClick={() => handleToggleFavorite(dist.id)}
+                                                    className="p-1 hover:scale-110 transition"
+                                                >
+                                                    <Star className={`h-4 w-4 ${dist.is_favorite ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
+                                                </button>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center space-x-1">
+                                                <Link
+                                                    href={`/products?distributor_id=${dist.id}`}
+                                                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition inline-flex items-center"
+                                                    title="Manage Products"
+                                                >
+                                                    <Package className="h-4 w-4" />
+                                                </Link>
+                                                {canManage && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => openEditModal(dist)}
+                                                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition inline-flex items-center"
+                                                            title="Edit Details"
+                                                        >
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </button>
+                                                        {canDelete && (
+                                                            <button
+                                                                onClick={() => { setDistToDelete(dist); setDeleteModalOpen(true); }}
+                                                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition inline-flex items-center"
+                                                                title="Delete Distributor"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Modal Footer: Full Pagination & Close */}
+                        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsFullTableModalOpen(false)}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition"
+                            >
+                                Back to Dashboard
+                            </button>
+                            <TablePagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                totalItems={totalItems}
+                                startIndex={startIndex}
+                                endIndex={endIndex}
+                                pageSize={pageSize}
+                                onPageChange={setCurrentPage}
+                                onPageSizeChange={setPageSize}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </MainLayout>
     );
 }

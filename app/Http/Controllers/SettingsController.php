@@ -180,6 +180,9 @@ class SettingsController extends Controller
 
     public function destroyUser(User $user)
     {
+        if (!auth()->user() || !auth()->user()->isAdmin()) {
+            abort(403, "Only administrators can archive user accounts.");
+        }
         if ($user->id === auth()->id()) {
             return redirect()->back()->with('error', 'You cannot archive your own active account!');
         }
@@ -201,6 +204,9 @@ class SettingsController extends Controller
 
     public function restoreUser($id)
     {
+        if (!auth()->user() || !auth()->user()->isAdmin()) {
+            abort(403, "Only administrators can restore user accounts.");
+        }
         $user = User::onlyTrashed()->findOrFail($id);
         $user->restore();
 

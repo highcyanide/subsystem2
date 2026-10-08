@@ -14,6 +14,7 @@ class Purchase extends Model
         'date',
         'distributor_id',
         'product_id',
+        'variant_id',
         'quantity',
         'purchase_price',
         'total_purchase',
@@ -25,13 +26,37 @@ class Purchase extends Model
         'net_profit',
     ];
 
+    protected $appends = [
+        'product_name',
+        'distributor_name',
+    ];
+
     public function distributor()
     {
-        return $this->belongsTo(Distributor::class);
+        return $this->belongsTo(Distributor::class, 'distributor_id', 'distributor_id');
     }
 
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class, 'product_id', 'product_id');
+    }
+
+    public function variant()
+    {
+        return $this->belongsTo(ProductVariant::class, 'variant_id', 'variant_id');
+    }
+
+    public function getProductNameAttribute(): string
+    {
+        if ($this->variant) {
+            return $this->variant->variant_name 
+                ?: ($this->variant->product?->name ?? 'N/A');
+        }
+        return $this->product?->name ?? 'N/A';
+    }
+
+    public function getDistributorNameAttribute(): string
+    {
+        return $this->distributor?->name ?? 'N/A';
     }
 }

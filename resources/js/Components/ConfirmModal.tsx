@@ -25,16 +25,23 @@ export default function ConfirmModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-rose-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
+        <div 
+            onClick={onCancel}
+            className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+            <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-slate-900 border border-rose-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up"
+            >
                 <div className="flex items-start justify-between mb-4">
                     <div className="h-12 w-12 rounded-xl bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-rose-400">
                         <AlertTriangle className="h-6 w-6" />
                     </div>
                     <button
+                        type="button"
                         onClick={onCancel}
                         disabled={isLoading}
-                        className="text-slate-400 hover:text-white p-1 rounded-lg"
+                        className="text-slate-400 hover:text-white p-1 rounded-lg transition"
                     >
                         <X className="h-5 w-5" />
                     </button>

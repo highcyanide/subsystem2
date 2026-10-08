@@ -1,9 +1,20 @@
 import { useState, useMemo } from 'react';
+import { router } from '@inertiajs/react';
 
 export type SortDirection = 'asc' | 'desc';
 
-export interface UseTableOptions<T> {
+export interface LaravelPaginator<T> {
     data: T[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+}
+
+export interface UseTableOptions<T> {
+    data: T[] | LaravelPaginator<T>;
     initialSortKey?: keyof T | string;
     defaultSortKey?: keyof T | string;
     initialSortDirection?: SortDirection;
@@ -13,7 +24,7 @@ export interface UseTableOptions<T> {
 }
 
 export function useTablePaginationAndSort<T extends Record<string, any>>({
-    data = [],
+    data,
     initialSortKey,
     defaultSortKey,
     initialSortDirection,
@@ -21,31 +32,49 @@ export function useTablePaginationAndSort<T extends Record<string, any>>({
     initialPageSize,
     defaultPageSize = 15,
 }: UseTableOptions<T>) {
+    const isServerPaginated = Boolean(
+        data && typeof data === 'object' && !Array.isArray(data) && 'current_page' in data && 'last_page' in data
+    );
+
+    const rawList: T[] = isServerPaginated 
+        ? ((data as LaravelPaginator<T>).data || [])
+        : (Array.isArray(data) ? data : []);
+
     const startKey = (initialSortKey || defaultSortKey || null) as string | null;
     const startDirection = (initialSortDirection || defaultDirection || 'asc') as SortDirection;
-    const startPageSize = initialPageSize || defaultPageSize || 15;
+    const startPageSize = isServerPaginated 
+        ? (data as LaravelPaginator<T>).per_page 
+        : (initialPageSize || defaultPageSize || 15);
 
     const [sortKey, setSortKey] = useState<string | null>(startKey);
     const [sortDirection, setSortDirection] = useState<SortDirection>(startDirection);
-    const [currentPage, setCurrentPage] = useState<number>(1);
+    const [currentPage, setCurrentPage] = useState<number>(() => {
+        return isServerPaginated ? (data as LaravelPaginator<T>).current_page : 1;
+    });
     const [pageSize, setPageSize] = useState<number>(startPageSize);
 
     // Toggle sort on a key
     const handleSort = (key: string) => {
-        if (sortKey === key) {
-            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortKey(key);
-            setSortDirection('asc');
+        const nextDir = sortKey === key && sortDirection === 'asc' ? 'desc' : 'asc';
+        setSortKey(key);
+        setSortDirection(nextDir);
+        setCurrentPage(1);
+
+        if (isServerPaginated && typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('sort', key);
+            url.searchParams.set('direction', nextDir);
+            url.searchParams.set('page', '1');
+            router.get(url.pathname + url.search, {}, { preserveState: true, preserveScroll: true });
         }
-        setCurrentPage(1); // reset to page 1 on sort change
     };
 
-    // Sort data
+    // Sort data for client-side arrays
     const sortedData = useMemo(() => {
-        if (!sortKey || !data) return data || [];
+        if (isServerPaginated) return rawList;
+        if (!sortKey || !rawList) return rawList || [];
 
-        return [...data].sort((a, b) => {
+        return [...rawList].sort((a, b) => {
             let valA = a[sortKey];
             let valB = b[sortKey];
 
@@ -88,26 +117,59 @@ export function useTablePaginationAndSort<T extends Record<string, any>>({
                 ? strA.localeCompare(strB)
                 : strB.localeCompare(strA);
         });
-    }, [data, sortKey, sortDirection]);
+    }, [rawList, sortKey, sortDirection, isServerPaginated]);
 
-    // Total pages
-    const totalItems = sortedData.length;
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    // Total items and pages
+    const totalItems = isServerPaginated ? (data as LaravelPaginator<T>).total : sortedData.length;
+    const totalPages = isServerPaginated 
+        ? Math.max(1, (data as LaravelPaginator<T>).last_page) 
+        : Math.max(1, Math.ceil(totalItems / pageSize));
 
-    // Current page bounds check
-    const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+    const activePage = isServerPaginated 
+        ? (data as LaravelPaginator<T>).current_page 
+        : Math.min(Math.max(1, currentPage), totalPages);
 
     // Paginated slice
     const paginatedData = useMemo(() => {
-        const startIndex = (validCurrentPage - 1) * pageSize;
+        if (isServerPaginated) {
+            return rawList;
+        }
+        const startIndex = (activePage - 1) * pageSize;
         return sortedData.slice(startIndex, startIndex + pageSize);
-    }, [sortedData, validCurrentPage, pageSize]);
+    }, [isServerPaginated, rawList, sortedData, activePage, pageSize]);
 
-    const startIndex = totalItems === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;
-    const endIndex = Math.min(validCurrentPage * pageSize, totalItems);
+    const startIndex = isServerPaginated
+        ? ((data as LaravelPaginator<T>).from ?? (totalItems === 0 ? 0 : 1))
+        : (totalItems === 0 ? 0 : (activePage - 1) * pageSize + 1);
+
+    const endIndex = isServerPaginated
+        ? ((data as LaravelPaginator<T>).to ?? totalItems)
+        : Math.min(activePage * pageSize, totalItems);
+
+    const onPageChange = (newPage: number) => {
+        if (isServerPaginated && typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', String(newPage));
+            router.get(url.pathname + url.search, {}, { preserveState: true, preserveScroll: true });
+        } else {
+            setCurrentPage(newPage);
+        }
+    };
+
+    const onPageSizeChange = (newSize: number) => {
+        setPageSize(newSize);
+        if (isServerPaginated && typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('per_page', String(newSize));
+            url.searchParams.set('page', '1');
+            router.get(url.pathname + url.search, {}, { preserveState: true, preserveScroll: true });
+        } else {
+            setCurrentPage(1);
+        }
+    };
 
     return {
-        // Sort properties (supports both sortConfig and direct properties)
+        // Sort properties
         sortKey,
         sortDirection,
         sortConfig: {
@@ -117,15 +179,12 @@ export function useTablePaginationAndSort<T extends Record<string, any>>({
         handleSort,
         requestSort: handleSort,
 
-        // Pagination properties (supports both aliases)
-        currentPage: validCurrentPage,
-        setCurrentPage,
-        setPage: setCurrentPage,
-        pageSize,
-        setPageSize: (newSize: number) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-        },
+        // Pagination properties
+        currentPage: activePage,
+        setCurrentPage: onPageChange,
+        setPage: onPageChange,
+        pageSize: isServerPaginated ? (data as LaravelPaginator<T>).per_page : pageSize,
+        setPageSize: onPageSizeChange,
         totalPages,
         totalItems,
         startIndex,

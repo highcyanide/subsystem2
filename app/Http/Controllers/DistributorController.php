@@ -58,8 +58,10 @@ class DistributorController extends Controller
             'is_favorite' => 'boolean',
         ]);
 
+        $validated['name'] = mb_strtoupper(trim($validated['name']));
+
         // Duplicate name check (case-insensitive)
-        $exists = Distributor::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($validated['name']))])->exists();
+        $exists = Distributor::whereRaw('LOWER(TRIM(name)) = ?', [strtolower($validated['name'])])->exists();
         if ($exists) {
             return redirect()->back()->withErrors([
                 'name' => "Distributor '{$validated['name']}' already exists in the system."
@@ -95,6 +97,8 @@ class DistributorController extends Controller
             'logo' => 'nullable|string',
             'is_favorite' => 'boolean',
         ]);
+
+        $validated['name'] = mb_strtoupper(trim($validated['name']));
 
         $oldValues = $distributor->toArray();
         $distributor->update($validated);
@@ -136,6 +140,9 @@ class DistributorController extends Controller
 
     public function destroy(Distributor $distributor)
     {
+        if (request()->user() && request()->user()->isChecker()) {
+            abort(403, "Checkers are not authorized to archive distributors.");
+        }
         $name = $distributor->name;
         $oldValues = $distributor->toArray();
 
@@ -159,6 +166,9 @@ class DistributorController extends Controller
 
     public function restore($id)
     {
+        if (request()->user() && request()->user()->isChecker()) {
+            abort(403, "Checkers are not authorized to restore distributors.");
+        }
         $distributor = Distributor::onlyTrashed()->findOrFail($id);
         $distributor->restore();
 

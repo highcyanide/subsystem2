@@ -15,6 +15,7 @@ class PurchaseController extends Controller
 {
     public function index(Request $request)
     {
+        ini_set('memory_limit', '256M');
         $distributorParam = $request->query('distributor_id');
         if ($request->has('distributor_ids') && !$request->has('distributor_id')) {
             $rawIds = $request->query('distributor_ids');
@@ -38,9 +39,6 @@ class PurchaseController extends Controller
             $distributorsQuery->where('name', 'like', "%{$search}%");
         }
         $allDistributors = $distributorsQuery->orderBy('name')->get();
-
-        $favorites = $allDistributors->where('is_favorite', true)->values();
-        $others = $allDistributors->where('is_favorite', false)->values();
 
         // Determine selected distributor IDs
         $selectedDistributorIds = [];
@@ -67,7 +65,7 @@ class PurchaseController extends Controller
             $selectedDistributor = Distributor::find($selectedDistributorIds[0]);
         }
 
-        $selectedDistributors = Distributor::whereIn('id', $selectedDistributorIds)->get();
+        $selectedDistributors = Distributor::whereIn('distributor_id', $selectedDistributorIds)->get();
 
         $purchases = collect([]);
         $products = collect([]);
@@ -79,16 +77,33 @@ class PurchaseController extends Controller
             'total_items' => 0,
         ];
 
+        $purchasesPaginator = null;
         if (!empty($selectedDistributorIds)) {
-            $products = Product::whereIn('distributor_id', $selectedDistributorIds)->orderBy('name')->get();
+            $products = Product::select(['product_id', 'name', 'category_id'])
+                ->where(function($q) use ($selectedDistributorIds) {
+                    $q->whereHas('distributors', function($dq) use ($selectedDistributorIds) {
+                        $dq->whereIn('distributors.distributor_id', $selectedDistributorIds);
+                    });
+                })
+                ->with([
+                    'unit',
+                    'distributors:distributors.distributor_id,name',
+                    'variants:variant_id,product_id,sku,purchase_price,default_discount,default_dealing_price,size_value,packaging_id,unit_id',
+                    'variants.packagingRelation:packaging_id,name',
+                    'variants.unit:unit_id,name,symbol'
+                ])
+                ->orderBy('name')
+                ->get();
 
-            $purchasesQuery = Purchase::with(['distributor', 'product'])
-                ->whereIn('distributor_id', $selectedDistributorIds);
+            $purchasesQuery = Purchase::whereIn('distributor_id', $selectedDistributorIds);
 
             if (!empty($search)) {
                 $purchasesQuery->where(function($q) use ($search) {
                     $q->whereHas('product', function($pq) use ($search) {
                         $pq->where('name', 'like', "%{$search}%");
+                    })->orWhereHas('variant', function($vq) use ($search) {
+                        $vq->where('variant_name', 'like', "%{$search}%")
+                           ->orWhere('sku', 'like', "%{$search}%");
                     })->orWhereHas('distributor', function($dq) use ($search) {
                         $dq->where('name', 'like', "%{$search}%");
                     });
@@ -115,16 +130,172 @@ class PurchaseController extends Controller
                 }
             }
 
-            $purchases = $purchasesQuery->orderBy('date', 'desc')->orderBy('id', 'desc')->get();
+            // Database-level KPI aggregation without loading all records into memory
+            $aggregates = (clone $purchasesQuery)->selectRaw('
+                COALESCE(SUM(total_purchase), 0) as total_purchase,
+                COALESCE(SUM(gross_amount), 0) as gross_amount,
+                COALESCE(SUM(vat_adjusted_amount), 0) as vat_adjusted_amount,
+                COALESCE(SUM(net_profit), 0) as net_profit,
+                COALESCE(SUM(quantity), 0) as total_items
+            ')->first();
 
-            $summary['total_purchase'] = $purchases->sum('total_purchase');
-            $summary['gross_amount'] = $purchases->sum('gross_amount');
-            $summary['vat_adjusted_amount'] = $purchases->sum('vat_adjusted_amount');
-            $summary['net_profit'] = $purchases->sum('net_profit');
-            $summary['total_items'] = $purchases->sum('quantity');
+            $summary['total_purchase'] = (float)($aggregates->total_purchase ?? 0);
+            $summary['gross_amount'] = (float)($aggregates->gross_amount ?? 0);
+            $summary['vat_adjusted_amount'] = (float)($aggregates->vat_adjusted_amount ?? 0);
+            $summary['net_profit'] = (float)($aggregates->net_profit ?? 0);
+            $summary['total_items'] = (int)($aggregates->total_items ?? 0);
+
+            // Server-side pagination: only fetch the requested rows (e.g. 15 per page)
+            $perPage = (int) $request->input('per_page', $request->input('pageSize', 15));
+            $sortKey = $request->input('sort', 'date');
+            $sortDirection = $request->input('direction', 'desc');
+
+            $allowedSorts = ['id', 'date', 'quantity', 'purchase_price', 'total_purchase', 'dealing_price', 'discount', 'gross_amount', 'vat_percentage', 'vat_adjusted_amount', 'net_profit'];
+            if (!in_array($sortKey, $allowedSorts)) {
+                $sortKey = 'date';
+            }
+            if (!in_array(strtolower($sortDirection), ['asc', 'desc'])) {
+                $sortDirection = 'desc';
+            }
+
+            $purchasesPaginator = $purchasesQuery->select([
+                'id', 'date', 'distributor_id', 'product_id', 'variant_id',
+                'quantity', 'purchase_price', 'total_purchase', 'dealing_price',
+                'discount', 'gross_amount', 'vat_percentage', 'vat_adjusted_amount', 'net_profit'
+            ])->with([
+                'distributor:distributor_id,name,contact_number',
+                'product:product_id,name,category_id',
+                'product.unit',
+                'variant:variant_id,product_id,sku,size_value,packaging_id,unit_id',
+                'variant.packagingRelation:packaging_id,name',
+                'variant.unit:unit_id,name,symbol',
+            ])->orderBy($sortKey, $sortDirection)->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
         }
 
-        $allProducts = Product::with('distributor')->orderBy('name')->get();
+        $allProducts = Product::select(['product_id', 'name', 'category_id'])
+            ->with([
+                'unit',
+                'distributors:distributors.distributor_id,name',
+                'variants:variant_id,product_id,sku,purchase_price,default_discount,default_dealing_price,size_value,packaging_id,unit_id',
+                'variants.packagingRelation:packaging_id,name',
+                'variants.unit:unit_id,name,symbol'
+            ])
+            ->orderBy('name')
+            ->get();
+
+        // Lightweight transformers to avoid deep Eloquent model trees and memory exhaustion
+        $formatDistributor = function ($d) {
+            if (!$d) return null;
+            return [
+                'id' => $d->distributor_id ?? $d->id,
+                'name' => $d->name,
+                'contact_number' => $d->contact_number ?? '',
+                'email' => $d->email ?? '',
+                'address' => $d->address ?? '',
+                'logo' => $d->logo ?? '',
+                'is_favorite' => (bool)$d->is_favorite,
+                'products_count' => (int)($d->products_count ?? 0),
+            ];
+        };
+
+        $formatProduct = function ($p) {
+            if (!$p) return null;
+            return [
+                'id' => $p->product_id ?? $p->id,
+                'distributor_id' => $p->distributor_id ?? ($p->distributors->first()?->distributor_id ?? 0),
+                'name' => $p->name,
+                'sku' => $p->sku ?? 'N/A',
+                'category' => $p->category ?? 'General',
+                'size_value' => $p->size_value ?? '',
+                'packaging' => $p->packaging ?? '',
+                'unit_id' => $p->unit_id ?? null,
+                'unit' => $p->unit ? [
+                    'id' => $p->unit->unit_id ?? $p->unit->id,
+                    'symbol' => $p->unit->symbol ?? '',
+                    'name' => $p->unit->name ?? '',
+                ] : null,
+                'purchase_price' => (float)($p->purchase_price ?? 0),
+                'default_discount' => (float)($p->default_discount ?? 0),
+                'default_dealing_price' => (float)($p->default_dealing_price ?? 0),
+                'distributor' => $p->distributor ? [
+                    'id' => $p->distributor->distributor_id ?? $p->distributor->id,
+                    'name' => $p->distributor->name,
+                ] : null,
+            ];
+        };
+
+        $formatPurchase = function ($p) {
+            if (!$p) return null;
+            $prod = $p->product;
+            $v = $p->variant;
+            $unit = $v?->unit ?? $prod?->unit;
+            return [
+                'id' => $p->id,
+                'date' => (string)$p->date,
+                'distributor_id' => (int)$p->distributor_id,
+                'product_id' => (int)$p->product_id,
+                'variant_id' => $p->variant_id ? (int)$p->variant_id : null,
+                'quantity' => (int)$p->quantity,
+                'purchase_price' => (float)$p->purchase_price,
+                'total_purchase' => (float)$p->total_purchase,
+                'dealing_price' => (float)$p->dealing_price,
+                'discount' => (float)$p->discount,
+                'gross_amount' => (float)$p->gross_amount,
+                'vat_percentage' => (float)$p->vat_percentage,
+                'vat_adjusted_amount' => (float)$p->vat_adjusted_amount,
+                'net_profit' => (float)$p->net_profit,
+                'distributor' => $p->distributor ? [
+                    'id' => $p->distributor->distributor_id ?? $p->distributor->id,
+                    'name' => $p->distributor->name,
+                    'contact_number' => $p->distributor->contact_number ?? '',
+                ] : null,
+                'product' => $prod ? [
+                    'id' => $prod->product_id ?? $prod->id,
+                    'distributor_id' => (int)$p->distributor_id,
+                    'name' => $prod->name,
+                    'sku' => $v?->sku ?? $prod->sku ?? 'N/A',
+                    'category' => $prod->category ?? 'General',
+                    'size_value' => $v?->size_value ?? $prod->size_value ?? '',
+                    'packaging' => $v?->packaging ?? $prod->packaging ?? '',
+                    'purchase_price' => (float)$p->purchase_price,
+                    'default_discount' => (float)$p->discount,
+                    'default_dealing_price' => (float)$p->dealing_price,
+                    'unit' => $unit ? [
+                        'id' => $unit->unit_id ?? $unit->id,
+                        'symbol' => $unit->symbol ?? '',
+                        'name' => $unit->name ?? '',
+                    ] : null,
+                ] : null,
+            ];
+        };
+
+        $formattedAllDistributors = $allDistributors->map($formatDistributor)->values()->all();
+        $formattedFavorites = collect($formattedAllDistributors)->filter(fn($d) => $d['is_favorite'])->values()->all();
+        $formattedOthers = collect($formattedAllDistributors)->filter(fn($d) => !$d['is_favorite'])->values()->all();
+
+        $formattedProducts = $products->map($formatProduct)->values()->all();
+        $formattedAllProducts = $allProducts->map($formatProduct)->values()->all();
+        
+        $formattedPurchases = $purchasesPaginator ? [
+            'data' => $purchasesPaginator->getCollection()->map($formatPurchase)->values()->all(),
+            'current_page' => $purchasesPaginator->currentPage(),
+            'last_page' => $purchasesPaginator->lastPage(),
+            'per_page' => $purchasesPaginator->perPage(),
+            'total' => $purchasesPaginator->total(),
+            'from' => $purchasesPaginator->firstItem(),
+            'to' => $purchasesPaginator->lastItem(),
+        ] : [
+            'data' => [],
+            'current_page' => 1,
+            'last_page' => 1,
+            'per_page' => 15,
+            'total' => 0,
+            'from' => null,
+            'to' => null,
+        ];
+
+        $formattedSelectedDistributors = $selectedDistributors->map($formatDistributor)->values()->all();
+        $formattedSelectedDistributor = $selectedDistributor ? $formatDistributor($selectedDistributor) : null;
 
         // Available dates for filter dropdown
         $availableDates = Purchase::select('date')
@@ -133,16 +304,16 @@ class PurchaseController extends Controller
             ->pluck('date');
 
         return Inertia::render('SalesPurchase/Index', [
-            'favorites' => $favorites,
-            'others' => $others,
-            'allDistributors' => $allDistributors,
-            'selectedDistributor' => $selectedDistributor,
+            'favorites' => $formattedFavorites,
+            'others' => $formattedOthers,
+            'allDistributors' => $formattedAllDistributors,
+            'selectedDistributor' => $formattedSelectedDistributor,
             'selectedDistributorIds' => $selectedDistributorIds,
-            'selectedDistributors' => $selectedDistributors,
+            'selectedDistributors' => $formattedSelectedDistributors,
             'isAllDistributors' => $isAllDistributors,
-            'products' => $products,
-            'allProducts' => $allProducts,
-            'purchases' => $purchases,
+            'products' => $formattedProducts,
+            'allProducts' => $formattedAllProducts,
+            'purchases' => $formattedPurchases,
             'summary' => $summary,
             'availableDates' => $availableDates,
             'filters' => [
@@ -160,8 +331,8 @@ class PurchaseController extends Controller
     {
         $validated = $request->validate([
             'date' => 'required|date',
-            'distributor_id' => 'required|exists:distributors,id',
-            'product_id' => 'required|exists:products,id',
+            'distributor_id' => 'required|exists:distributors,distributor_id',
+            'product_id' => 'required|exists:products,product_id',
             'quantity' => 'required|integer|min:1',
             'purchase_price' => 'required|numeric|min:0',
             'discount' => 'nullable|numeric|min:0',
@@ -184,9 +355,12 @@ class PurchaseController extends Controller
         $vatAdjustedAmount = $grossAmount * (1 - ($vatRate / 100));
         $netProfit = $grossAmount - $totalPurchase;
 
+        $distId = $distributor->distributor_id ?? $distributor->id;
+        $prodId = $product->product_id ?? $product->id;
+
         // Rapid double-click / debounce protection (within 3 seconds)
-        $recentDuplicate = Purchase::where('distributor_id', $distributor->id)
-            ->where('product_id', $product->id)
+        $recentDuplicate = Purchase::where('distributor_id', $distId)
+            ->where('product_id', $prodId)
             ->where('date', $validated['date'])
             ->where('quantity', $quantity)
             ->where('purchase_price', $purchasePrice)
@@ -199,8 +373,9 @@ class PurchaseController extends Controller
 
         $purchase = Purchase::create([
             'date' => $validated['date'],
-            'distributor_id' => $distributor->id,
-            'product_id' => $product->id,
+            'distributor_id' => $distId,
+            'product_id' => $prodId,
+            'variant_id' => $product->variant_id ?? null,
             'quantity' => $quantity,
             'purchase_price' => $purchasePrice,
             'total_purchase' => $totalPurchase,
@@ -316,6 +491,9 @@ class PurchaseController extends Controller
 
     public function destroy(Purchase $purchase)
     {
+        if (request()->user() && request()->user()->isChecker()) {
+            abort(403, "Checkers are not authorized to archive purchase records.");
+        }
         $oldValues = $purchase->toArray();
         $prodName = $purchase->product?->name ?? 'Item';
         $distId = $purchase->distributor_id;
@@ -348,6 +526,9 @@ class PurchaseController extends Controller
 
     public function restore($id)
     {
+        if (request()->user() && request()->user()->isChecker()) {
+            abort(403, "Checkers are not authorized to restore purchase records.");
+        }
         $purchase = Purchase::onlyTrashed()->findOrFail($id);
         $purchase->restore();
 

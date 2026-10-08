@@ -8,6 +8,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\UnitController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Auth Routes (Guest Only) ───────────────────────────────────────────────
@@ -23,14 +24,17 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->n
 // ─── Authenticated Routes ───────────────────────────────────────────────────
 Route::middleware('auth')->group(function () {
 
-    // Default redirect to Sales & Purchase Module
+    // Default redirect to Inventory Management Module
     Route::get('/', function () {
-        return redirect()->route('sales-purchase.index');
+        return redirect()->route('inventory.index');
     })->name('home');
 
     // Subsystem 1: Module 1 - Inventory Management System
     Route::prefix('inventory')->name('inventory.')->group(function () {
         Route::get('/', [InventoryController::class, 'index'])->name('index');
+        Route::post('/stock-in', [InventoryController::class, 'stockIn'])->name('stock-in')->middleware('role:admin,owner');
+        Route::post('/stock-out', [InventoryController::class, 'stockOut'])->name('stock-out')->middleware('role:admin,owner');
+        Route::post('/adjust', [InventoryController::class, 'adjust'])->name('adjust')->middleware('role:admin,owner');
         Route::patch('/{inventory}/quantity', [InventoryController::class, 'updateQuantity'])->name('update-quantity');
         Route::post('/batch', [InventoryController::class, 'batchUpdate'])->name('batch-update');
     });
@@ -48,7 +52,8 @@ Route::middleware('auth')->group(function () {
     // Subsystem 2: Module 2 - Adding and Updating of Items of Each Distributor
     Route::prefix('products')->name('products.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
-        Route::post('/', [ProductController::class, 'store'])->middleware('role:admin,owner');
+        Route::get('/create', [ProductController::class, 'create'])->name('create')->middleware('role:admin,owner');
+        Route::post('/', [ProductController::class, 'store'])->name('store')->middleware('role:admin,owner');
         Route::put('/{product}', [ProductController::class, 'update'])->name('update')->middleware('role:admin,owner');
         Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy')->middleware('role:admin');
         Route::post('/{id}/restore', [ProductController::class, 'restore'])->name('restore')->middleware('role:admin');
@@ -62,6 +67,9 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{purchase}', [PurchaseController::class, 'destroy'])->name('destroy')->middleware('role:admin');
         Route::post('/{id}/restore', [PurchaseController::class, 'restore'])->name('restore')->middleware('role:admin');
     });
+
+    // Units Module (used by Inventory modal & Product Management)
+    Route::resource('units', UnitController::class)->only(['index', 'store', 'update', 'destroy']);
 
     // User Manual / Interactive Demo Guide
     Route::get('/guide', function () {

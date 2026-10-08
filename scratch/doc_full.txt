@@ -1,0 +1,708 @@
+
+
+
+
+
+
+
+WAREHOUSE INVENTORY MANAGEMENT SYSTEM
+
+An IT Project 5 ProposalPresented to theFaculty of the College of Computer Studies
+Capitol UniversityCorrales, Extn. Cagayan De Oro City
+In Partial Fulfillmentof the Requirements for the DegreeBachelor of Science in Information Technology
+By:
+Regodos, Alexa A.
+
+
+
+October 2026
+
+TABLE OF CONTENTS
+
+ TOC \o "1-3" \h \z \u Title Page PAGEREF _Toc224067257 \h Error! Bookmark not defined.
+Approval Sheet PAGEREF _Toc224067258 \h i
+Table of Contents PAGEREF _Toc224067259 \h ii
+CHAPTER 1 - INTRODUCTION PAGEREF _Toc224067260 \h 1
+1.1 Introduction PAGEREF _Toc224067262 \h 1
+1.2 Background of the Study PAGEREF _Toc224067263 \h 1
+1.3 Statement of the Problem PAGEREF _Toc224067264 \h 1
+1.3.1 General Problem PAGEREF _Toc224067265 \h Error! Bookmark not defined.
+1.3.2 Specific Problems / Research Questions PAGEREF _Toc224067266 \h 2
+1.4 Objectives of the Study PAGEREF _Toc224067267 \h 2
+1.4.1 General Objective PAGEREF _Toc224067268 \h Error! Bookmark not defined.
+1.4.2 Specific Objectives PAGEREF _Toc224067269 \h Error! Bookmark not defined.
+1.5 Significance of the Study PAGEREF _Toc224067270 \h 2
+1.6 Scope and Limitations PAGEREF _Toc224067271 \h 4
+1.7 Definition of Terms PAGEREF _Toc224067273 \h 5
+CHAPTER 2 – REVIEW OF RELATED LITERATUREAND STUDIES PAGEREF _Toc224067274 \h 8
+2.1 Related Literature PAGEREF _Toc224067275 \h 8
+2.4 Conceptual Framework PAGEREF _Toc224067276 \h Error! Bookmark not defined.
+2.4.1 Conceptual Framework Diagram PAGEREF _Toc224067278 \h Error! Bookmark not defined.
+2.4.2 Explanation of the Framework PAGEREF _Toc224067279 \h Error! Bookmark not defined.
+CHAPTER 3 - METHODOLOGY PAGEREF _Toc224067280 \h Error! Bookmark not defined.
+3.1 Research Design PAGEREF _Toc224067281 \h Error! Bookmark not defined.
+3.2 Research Locale PAGEREF _Toc224067282 \h Error! Bookmark not defined.
+3.3 Respondents of the Study PAGEREF _Toc224067284 \h Error! Bookmark not defined.
+3.4 Research Instruments PAGEREF _Toc224067285 \h Error! Bookmark not defined.
+3.5 Data Gathering Procedure PAGEREF _Toc224067286 \h Error! Bookmark not defined.
+3.6 System Development Methodology (SDLC) PAGEREF _Toc224067287 \h Error! Bookmark not defined.
+3.7 Data Analysis Technique PAGEREF _Toc224067288 \h Error! Bookmark not defined.
+3.8 Ethical Considerations PAGEREF _Toc224067289 \h Error! Bookmark not defined.
+REFERENCES PAGEREF _Toc224067290 \h Error! Bookmark not defined.
+
+
+
+
+CHAPTER 1 
+PLANNING
+1.1 Introduction
+Warehouse operations depend on accurate information about what stock is available, where it is stored, which batch should be picked first, and what stage each order has reached. When these details are recorded manually or in disconnected files, staff spend time searching for information and supervisors have limited visibility into stock risks and fulfillment progress.
+WIMS is a browser-based inventory and fulfillment system for a warehouse that handles transfer and export orders. It centralizes products, locations, batches, quantities, orders, users, stock adjustments, and inventory movements in a MySQL database. The system applies first-in, first-out (FIFO) allocation to eligible batches and presents role-specific views for administration, warehouse operations, and management review.
+1.2 Background of the Problem
+The warehouse receives products in batches and stores them in physical locations identified by zone, aisle, shelf, and bin. Products may have expiry dates, so picking the oldest eligible batch is important, especially for perishables. Orders also pass through several stages: Pending, Picking, Picked, Packed, and Shipped.
+In the existing process, stock counts, batch details, order progress, and movement records may be maintained through paper forms, spreadsheets, verbal instructions, or separate files. This makes it difficult to obtain a current stock balance, locate a batch, identify low-stock items, confirm that staff picked from the correct location, or trace who performed an adjustment. The lack of a shared workflow increases the risk of wrong-item picks, expired stock usage, duplicate deductions, and delayed reporting.
+1.3 Problem Statement
+Warehouse administrators, staff, and owners need a reliable way to monitor inventory and fulfill orders. At present, inventory quantities, batch expiry dates, physical locations, order statuses, and stock movements are not consistently managed in one connected workflow. Staff may need to search several records before picking an item, while owners and administrators may receive delayed or incomplete information about stock levels and operational performance.
+These limitations can cause inaccurate stock balances, missed low-stock conditions, inefficient picking, and avoidable picking errors. An IT solution is necessary to centralize warehouse records, enforce role-based access, prioritize eligible stock using FIFO, verify location and product scans, record every material movement, and provide timely dashboards and reports.
+1.4 General Objective
+To develop a web-based Warehouse Inventory Management System that improves the accuracy, traceability, and efficiency of warehouse inventory control and order fulfillment.
+1.5 Specific Objectives
+To authenticate users and provide role-based access for Admin, Staff, and Owner accounts.
+To maintain product, warehouse location, batch, supplier, purchase order, expiry, and quantity records.
+To calculate FIFO pick instructions using the oldest non-expired batches with available stock.
+To provide staff with an open order queue and controlled order status workflow.
+To verify the expected warehouse location and product SKU through barcode or code scanning.
+To record stock adjustments and inventory movements with the responsible user, reason, quantity, and timestamp.
+To identify products below their configured low-stock thresholds and display stock alerts.
+To provide dashboards and summaries appropriate to each user role.
+To maintain order item quantities for requested, picked, packed, and shipped work.
+To reduce manual searching, duplicate recording, and errors in warehouse operations.
+
+1.6 Significance of the Project
+The proposed Warehouse Inventory Management System will provide significant benefits to the following: 
+Organization (Warehouse) - Better traceability, fewer picking errors, more consistent stock records, and improved decision-making. Current summaries of stock, alerts, open orders, and fulfillment performance.
+Administrators - Centralized user, inventory, adjustment, alert, and reporting control.
+Users (Warehouse Staff) - Clear pick queues, FIFO instructions, location information, scan verification, and faster status updates.
+Customers- The proposed system will improve the overall ordering experience for customers by reducing waiting times, ensuring accurate and complete orders, and making essential products consistently available. Faster processing of orders and better staff coordination will allow customers to receive timely orders and store services, which can contribute to improved outcomes and increased satisfaction with the store services.
+Researchers/Developers - The warehouse inventory management system will provide practical experience to researchers and developers who will work on its design and execution. The project will improve their abilities to analyze requirements and design systems and databases and develop user interfaces which they will apply to warehouse inventory management projects.
+Future Researchers - Future researchers will utilize this study as their primary source for researching warehouse inventory management systems which operate in primary inventory management that optimizes ordering store services. The documentation of the system's design and development process provides a basis for future research in a modular foundation for receiving, audit logs, notifications, and integrations.
+Academic Institution (Capitol University - College of Computer Studies) - The College of Computer Studies at Capitol University will enhance its academic and community outreach through this IT project which addresses an actual warehouse inventory problem. The project shows the college's ability to create essential IT solutions and it promotes student research and it establishes the institution's status as a source of technology-based solutions for local community problems.
+
+1.7 Stakeholders
+Stakeholder
+Role in the project
+Interest or need
+Admin
+Manages accounts, permissions, inventory controls, adjustments, and reports.
+Secure control and complete operational visibility.
+Staff
+Performs picking, packing, scanning, stock checks, and order updates.
+Accurate instructions and efficient daily work.
+Owner
+Reviews warehouse performance, orders, risks, and summaries.
+Reliable information for planning and decisions.
+Warehouse management
+Defines policies, thresholds, and workflow rules.
+Consistent processes and measurable performance.
+System developer or maintainer
+Builds, tests, secures, and supports the application.
+Maintainable code and clear requirements.
+
+1.8 Project Scope
+In scope
+User login, logout, session handling, and role-based authorization.
+Admin, Staff, and Owner dashboards.
+Product and SKU records.
+Warehouse location records using zone, aisle, shelf, bin, and location code.
+Batch records with purchase order, supplier, received date, expiry date, initial quantity, and current quantity.
+FIFO allocation and pick instructions for available, non-expired batches.
+Transfer and export orders with order items and fulfillment statuses.
+Inventory movement and stock adjustment records.
+Low-stock alerts based on product thresholds.
+Location and product barcode or code verification workflow.
+Order, inventory, and operational summary views.
+Responsive browser access on desktop, tablet, or mobile-sized screens.
+Out of scope for the initial release
+Native Android or iOS applications.
+Automatic purchase-order creation or supplier portal integration.
+Online payment and customer-facing ordering.
+Direct integration with an external ERP, POS, accounting, or courier system.
+Automated hardware installation or dedicated industrial scanner procurement.
+Advanced demand forecasting, artificial intelligence, or route optimization.
+Multi-warehouse synchronization.
+1.9 Limitations and Assumptions
+The first release is designed for one warehouse and one MySQL database.
+Users must have valid accounts and appropriate permissions.
+Product, batch, location, order, and threshold data must be entered accurately.
+Camera scanning depends on browser permissions, device hardware, lighting, and network access; manual code entry may be used as a fallback.
+The initial authentication seed accounts are for development and demonstration. Production deployment must use changed credentials, secure configuration, HTTPS, and stronger account administration.
+The system reports the data stored in it and cannot correct physical stock discrepancies without a verified adjustment.
+Backup, high availability, and external integrations are deployment responsibilities beyond the initial prototype.
+1.10 Feasibility Study
+Technical Feasibility - The system is technically feasible because the target environment already supports PHP, Apache, MySQL, PDO, HTML, CSS, and JavaScript. The application can use a layered structure consisting of configuration, authentication, controllers, services, models, and views. The required database entities and core workflow are small enough for a student or small development team to implement incrementally. Barcode or QR scanning can be provided through a browser-compatible JavaScript library, with manual entry as a fallback.
+Economic Feasibility - The prototype can be developed with existing computers, XAMPP, VS Code, open-source software, and an existing local network. These choices minimize licensing costs. Future costs may include hosting, backups, HTTPS, barcode labels, scanners, training, and maintenance. The expected benefits of fewer stock errors, less manual reconciliation, and faster reporting justify the low initial development cost.
+Operational Feasibility - The system matches the existing warehouse roles and activities. Staff use a focused operational view, administrators control configuration and adjustments, and owners receive summary information. Short training, clear labels, and a consistent status workflow should support adoption. A pilot using a limited set of products and one warehouse zone is recommended before full deployment.
+Schedule Feasibility - The project is suitable for incremental delivery. Login and database setup can be delivered first, followed by inventory and FIFO, order fulfillment, scan verification, dashboards, testing, and documentation. A working prototype can be completed within an academic project schedule if the first release remains within the scope defined above.
+
+CHAPTER 2
+ANALYSIS
+2.1 Existing System Description
+The current warehouse process is primarily manual or distributed across paper records, spreadsheets, and verbal coordination:
+A product shipment is received and its quantity, batch, expiry date, and location are recorded.
+A transfer or export request is received and staff identify the required products and quantities.
+Staff search inventory records and choose a batch, usually by experience or visible availability.
+Staff travel to the recorded location and pick the product.
+Counts and order progress are updated manually.
+A supervisor or owner reviews summaries after updates have been collected.
+The process does not consistently enforce FIFO, verify the location and SKU before a pick, or connect each quantity change to a user and movement record.
+
+2.2 Existing Process Flowchart
+123190762000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2.3 Problems and Issues Identified
+Inconsistent stock visibility: Records may be outdated, duplicated, or stored in different places.
+FIFO and expiry risk: Staff may select a newer batch before an older eligible batch or accidentally use expired stock.
+Picking errors: There is no consistent two-step check that confirms both the physical location and product SKU.
+Weak traceability: Manual changes may not identify the user, reason, exact quantity, or timestamp.
+Delayed alerts: Low stock and expiry risks may be noticed only during a manual review.
+Slow order updates: Staff and owners may not see current progress through Pending, Picking, Picked, Packed, and Shipped stages.
+Difficult reporting: Preparing summaries requires collecting and reconciling multiple records.
+2.4 Requirements Gathering Method
+Requirements are based on an assumed semi-structured interview with the three target roles, observation of the receiving and picking workflow, review of existing project documentation, and analysis of the current database design. A pilot review should be performed with representative product, batch, location, and order records before final deployment.
+Interview questions
+How are products received and recorded today?
+Which product, batch, supplier, expiry, and location details must be captured?
+How do staff currently locate stock for a transfer or export order?
+How is the oldest or earliest-expiring stock identified?
+What information should appear on a staff pick instruction?
+How are location and product codes verified during picking?
+What order statuses are used, and who is allowed to change each status?
+How are stock adjustments approved and documented?
+Which information should be included in a movement or audit record?
+What low-stock threshold should be used for each product?
+Which dashboard indicators does each role need to see?
+How should the system handle insufficient stock or an expired batch?
+What should happen when a barcode cannot be scanned?
+What reports are needed daily, weekly, or monthly?
+What training, device, network, and backup constraints exist in the warehouse?
+
+2.5 Functional Requirements
+ID
+Functional requirement
+Priority
+FR-01
+The system shall allow a registered user to log in and log out securely.
+High
+FR-02
+The system shall apply access rules for Admin, Staff, and Owner roles.
+High
+FR-03
+The system shall display a role-specific dashboard after successful login.
+High
+FR-04
+The system shall create and maintain product records including SKU, name, category, and low-stock threshold.
+High
+FR-05
+The system shall create and maintain warehouse locations and unique location codes.
+High
+FR-06
+The system shall record product batches, Distributors, purchase orders, received dates, expiry dates, and quantities.
+High
+FR-07
+The system shall display current stock by product, batch, expiry date, and location.
+High
+FR-08
+The system shall exclude expired batches from eligible FIFO allocation.
+High
+FR-09
+The system shall allocate requested quantities from eligible batches in FIFO order.
+High
+FR-10
+The system shall identify and report insufficient stock before completing an allocation.
+High
+FR-11
+The system shall create and display transfer and export orders with their order items.
+High
+FR-12
+The system shall support the statuses Pending, Picking, Picked, Packed, and Shipped.
+High
+FR-13
+The system shall update requested, picked, packed, and shipped quantities for order items.
+High
+FR-14
+The system shall verify a scanned location against the expected batch location.
+High
+FR-15
+The system shall verify a scanned product code against the expected product SKU.
+High
+FR-16
+The system shall record inventory movements for inbound, outbound, adjustment, pick, pack, return, and transfer activity.
+High
+FR-17
+The system shall allow authorized users to create stock adjustments with a reason and quantity.
+High
+FR-18
+The system shall prevent an adjustment from making a batch quantity negative.
+High
+FR-19
+The system shall calculate and display low-stock alerts using product thresholds.
+Medium
+FR-20
+The system shall display recent orders, movement history, alerts, and operational summaries.
+Medium
+FR-21
+The system shall allow authorized users to review order detail and related movements.
+Medium
+FR-22
+The system shall support manual code entry when camera scanning is unavailable.
+Medium
+
+2.6 Nonfunctional Requirements
+ID
+Category
+Requirement
+Measure or acceptance condition
+NFR-01
+Security
+The system shall require authentication for protected pages.
+Unauthenticated requests are redirected to login.
+NFR-02
+Security
+The system shall enforce role-based authorization on every protected operation.
+A user cannot access another role's restricted view or action.
+NFR-03
+Security
+The system shall use password hashing and prepared database statements.
+Passwords are not stored in plain text and user input is parameterized.
+NFR-04
+Security
+The system shall escape user-controlled output in HTML views.
+Product names, notes, and messages cannot inject page markup.
+NFR-05
+Performance
+Normal dashboard and list requests should respond within three seconds on the local network.
+Tested using representative warehouse data.
+NFR-06
+Usability
+The interface shall use clear labels, readable status indicators, and responsive layouts.
+A trained staff member can complete a standard pick without assistance.
+NFR-07
+Reliability
+A failed validation shall not commit a partial stock adjustment or invalid status change.
+Invalid submissions leave quantities unchanged.
+NFR-08
+Data integrity
+Stock quantities shall not become negative through normal system operations.
+Database updates validate available quantity before deduction.
+NFR-09
+Availability
+The application shall be usable during warehouse operating hours when Apache, MySQL, and the local network are available.
+Service startup and database health are checked before use.
+NFR-10
+Maintainability
+Business logic shall remain separated into controllers, services, models, and views.
+Changes to FIFO logic do not require rewriting dashboard markup.
+NFR-11
+Scalability
+Product, batch, order, and movement queries shall use bounded lists and suitable indexes as data grows.
+The system remains usable beyond the demonstration records.
+NFR-12
+Recoverability
+Database backups shall be scheduled before production use.
+A tested backup can restore the WMS database.
+
+2.7 Actors
+Actor
+Description
+Main permissions
+Admin
+System and warehouse administrator.
+Manage users and configuration, review all data, perform or approve adjustments, view reports.
+Staff
+Warehouse operator.
+View inventory and pick queue, follow FIFO instructions, scan codes, pick and pack, update order status.
+Owner
+Warehouse owner or manager.
+Review dashboards, orders, alerts, summaries, and reports.
+MySQL database
+Supporting system actor/data store.
+Stores users, inventory, orders, movements, and adjustment records.
+Camera or barcode scanner
+Supporting input device.
+Supplies location and product code values for verification.
+
+2.8 Use Cases
+Use case
+Primary actor
+Result
+Log in and log out
+Admin, Staff, Owner
+Authenticated session and role dashboard.
+Manage user access
+Admin
+User accounts and roles are maintained.
+Manage products and thresholds
+Admin
+Product and alert configuration is available.
+Manage locations and batches
+Admin
+Physical stock structure and batch records are available.
+View inventory
+Admin, Staff, Owner
+Current quantities, locations, batches, and expiry details are displayed according to role.
+Create stock adjustment
+Admin, authorized Staff
+Quantity and reason are recorded as an adjustment and movement.
+Review low-stock alerts
+Admin, Owner, Staff
+Products below threshold are highlighted.
+View pick queue
+Staff
+Open orders are sorted for operational work.
+Generate FIFO instructions
+Staff
+Requested quantity is assigned to eligible oldest batches.
+Verify location scan
+Staff
+The physical location is accepted or rejected.
+Verify product scan
+Staff
+The SKU is accepted or rejected against the task.
+Update order status
+Staff, authorized Admin
+Order and item fulfillment progress is updated.
+Review order detail
+Staff, Owner, Admin
+Order information and movement history are displayed.
+View reports and summaries
+Admin, Owner, Staff
+Role-appropriate operational information is produced.
+
+2.9 Use Case Diagram
+
+
+
+
+
+
+CHAPTER 3
+DESIGN
+3.1 Proposed System Overview
+WIMS is a server-rendered web application. Users access a role-specific dashboard through a browser. Controllers receive requests, services apply business rules such as FIFO and movement recording, models represent domain data, and PDO connects the application to MySQL. Views render forms, lists, alerts, dashboards, and workflow results.
+The design uses one logical MySQL database with separate data responsibilities. Inventory data includes users, products, locations, batches, movements, and adjustments. Order data includes orders and order items. The logical separation supports clear DFDs without requiring separate physical databases in the prototype.
+
+3.2 System Architecture
+603250422719500
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Component
+Purpose
+Browser interface
+Provides login, dashboards, forms, lists, scan controls, and responsive feedback.
+Apache
+Serves the PHP application and static assets.
+Public entry point
+Handles the public login route and logout request.
+PHP controllers
+Receive requests and coordinate views and services.
+Authentication and session layer
+Verifies passwords, starts sessions, and applies roles.
+FIFO service
+Finds eligible batches and allocates stock in priority order.
+Movement and fulfillment services
+Applies stock changes, records movements, and updates order progress.
+MySQL database
+Persists users, inventory, orders, quantities, adjustments, and history.
+Dashboard/report views
+Aggregate and present information by role.
+
+3.3 Database Design
+Entity
+Primary key
+Important attributes
+users
+user_id
+username, password_hash, full_name, role, created_at
+locations
+location_id
+zone, aisle, shelf, bin, location_code
+products
+product_id
+sku, name, category, low_stock_threshold
+batches
+batch_id
+product_id, batch_code, po_number, supplier_name, date_received, expiry_date, initial_quantity, current_quantity, location_id
+orders
+order_id
+order_type, status, created_at, updated_at
+order_items
+item_id
+order_id, product_id, quantity_requested, quantity_picked, quantity_packed, status, created_at
+inventory_movements
+movement_id
+product_id, batch_id, order_id, movement_type, quantity, reference_type, reference_id, user_id, notes, created_at
+stock_adjustments
+adjustment_id
+product_id, batch_id, adjustment_type, quantity, reason, created_by, created_at
+
+Relationships
+One product has many batches, order items, inventory movements, and stock adjustments.
+One location contains many batches.
+One order has many order items and may have many related inventory movements.
+One user creates many inventory movements and stock adjustments.
+A batch belongs to one product and one location.
+An order item belongs to one order and one product.
+A movement may reference a product, batch, and order, depending on its type.
+
+-99568020447000Entity Relationship Diagram
+Data integrity rules
+Usernames, SKUs, batch codes, and location codes must be unique.
+Product, batch, order, and user references must point to valid records.
+Current quantity must not become negative.
+FIFO allocation may use only batches with positive quantity and no expiry date before the current date.
+Every stock adjustment must include a reason and responsible user.
+Every material stock change should create a corresponding inventory movement.
+Order item quantities must not exceed the requested quantity.
+
+
+3.4 Interface Design and Wireframes
+The wireframes below describe the minimum screens for the first release. They are intentionally low-fidelity and focus on content, navigation, and task flow.
+Wireframe 1: Login page
+
+Wireframe 2: Admin dashboard
+
+Wireframe 3: Staff pick and scan screen
+
+Wireframe 4: Inventory and batch list
+
+Wireframe 5: Order detail and fulfillment
+
+Wireframe 6: Owner monitoring view
+
+ 
+-1049020270510003.5 Navigation Structure
+
+
+3.6 Detailed Process Design: FIFO Pick and Scan Verification
+The selected major process is the fulfillment of an order item. It combines FIFO allocation, location verification, product verification, stock deduction, movement recording, and order item updates.
+
+centercenter00
+
+Process rules
+A batch with an expiry date earlier than today is not eligible.
+Eligible batches are ordered by received date, then expiry date and batch identifier as tie-breakers.
+The system must confirm sufficient total eligible stock before committing the full requested allocation.
+A location mismatch or SKU mismatch must stop the current verification step and leave stock unchanged.
+A successful pick updates the batch quantity, records an inventory movement, and updates the order item.
+Repeating a status request must not deduct the same requested quantity twice.
+Insufficient stock must return a clear message so a supervisor can adjust the order or inventory.
+
+3.7 Design Explanation
+The design separates presentation, request coordination, and business rules so the system can evolve without mixing database logic into every page. The database records both current state and movement history: current quantities make daily work fast, while movements and adjustments provide traceability. FIFO is implemented as a service because it is a business rule used by order fulfillment and scan workflows.
+Role-based dashboards reduce clutter and limit access to information according to responsibility. Staff receive action-oriented work queues and verification feedback. Admins receive control and configuration functions. Owners receive summary information without needing operational editing access. The responsive interface supports the devices likely to be used in a warehouse while retaining manual entry when camera scanning is unavailable.
+3.8 Testing and Acceptance Plan
+Test area
+Example acceptance test
+Authentication
+Valid users reach the correct dashboard; invalid credentials are rejected.
+Authorization
+Staff cannot open admin-only pages; owners cannot perform restricted adjustments.
+FIFO
+A request uses the oldest eligible batch first and skips expired stock.
+Insufficient stock
+A request larger than available stock is rejected without a partial committed deduction.
+Stock adjustment
+Increase, decrease, and correction validate quantity and record a reason and movement.
+Scan verification
+Wrong location and wrong SKU are rejected; matching codes proceed.
+Order workflow
+Status changes update the order and appropriate item quantities.
+Traceability
+A movement shows product or batch, quantity, user, reference, note, and timestamp.
+Alerts
+A product below its threshold appears in the alert view.
+Responsive UI
+Login, dashboard, queue, and scan views remain usable on desktop and mobile-sized screens.
+
+
+CHAPTER 4
+DEVELOPMENT
+4.1 Configured Technical Architecture
+Development environment
+Component
+WIMS configuration
+Verification evidence
+Operating system
+Windows workstation running XAMPP
+Apache and MySQL services start successfully
+Web server
+Apache with the project served from C:\xampp\htdocs\wims
+http://localhost/wims/public/index.php loads
+Application runtime
+PHP 8 or later with PDO and MySQL support
+Login and dashboard requests execute without PHP errors
+Database
+MySQL database named wims_db, character set utf8mb4
+app/config/db.php creates the database and required tables
+Client devices
+Desktop, tablet, or phone with a modern browser
+Responsive views render at supported screen sizes
+Network
+Local warehouse LAN or approved HTTPS deployment
+Client can reach Apache and the database remains server-side
+Source control
+Project repository containing application and documentation
+Changes are reviewed before deployment
+
+Required server configuration
+Enable Apache and MySQL in XAMPP and confirm that ports are available.
+Enable PHP PDO MySQL and configure date.timezone for the warehouse location.
+Point the Apache document root or virtual host to the WIMS project directory.
+Allow only the web server to access MySQL from the application host. Do not expose the database directly to warehouse clients.
+Configure HTTPS, protected environment credentials, PHP error logging, and scheduled database backups before production use.
+Restrict write permissions to required application and log directories. Development seed credentials must be replaced before rollout. 
+Architecture build sign-off
+Check
+Acceptance condition
+Status before production
+Web server
+Apache serves the public entry point and PHP pages
+To be verified in the target environment
+Database
+wims_db and all required tables are created successfully
+Prototype configured
+Connectivity
+A browser can complete login and load the role dashboard
+Prototype implemented
+Backup
+A backup can be created and restored to a test database
+Required before sign-off
+Security
+HTTPS, secrets, permissions, and non-demo accounts are configured
+Required before sign-off
+
+4.2 Built Databases and Software Code
+Repository deliverables
+Repository area
+Implemented responsibility
+app/config
+Application constants and PDO/MySQL connection plus seed-table setup
+app/core
+Sessions, login authorization, role checks, redirects, and helper functions
+app/controllers
+Dashboard, inventory, authentication, and order request handling
+app/models
+User, product, batch, and order domain objects
+app/services
+FIFO allocation, inventory movement, order deduction, and stock adjustment logic
+app/views
+Login, admin, staff, owner, order detail, and stock adjustment screens
+public
+Public entry point used for login and logout routing
+docs
+Planning, analysis, design, schema, roles, setup, and SDLC deliverables
+
+Database structures
+The configured database contains users, locations, products, batches, orders, order_items, inventory_movements, and stock_adjustments. Products connect to batches, batches connect to locations, orders connect to order items, and inventory movements record the product, batch, order reference, user, quantity, type, reason, and timestamp. The schema is documented in schema.md and initialized by app/config/db.php.
+Code reuse plan
+Developers reuse the existing PDO connection options, session helpers, role constants, dashboard query patterns, movement-recording function, and FIFO service. Reuse is allowed only when the existing function has tests and matching business rules. The standalone prototype files at the project root may be used as design references, but production pages must call the shared application services instead of duplicating database logic.
+4.3 Automated Bottom-Up Unit Test Suite
+Tests are written from the bottom up and run after each service or controller change. The initial suite should use PHPUnit with a separate test database and fixture data; production data must never be used by automated tests.
+Test layer
+Units and cases
+Expected result
+Core helpers
+Login redirect, role label, logged-in and logged-out session state
+Correct route or value is returned
+Authentication
+Valid credentials, invalid credentials, blank fields, unknown user
+Only valid credentials create a session
+FIFO service
+One batch, multiple batches, expired batch, insufficient stock, zero quantity
+Oldest eligible stock is selected and totals are correct
+Movement service
+Increase, decrease, correction, invalid product, wrong batch, negative result
+Valid changes are recorded; invalid changes are rejected
+Order service
+Allowed statuses, invalid status, missing order, repeated status update, insufficient stock
+Status and inventory remain consistent
+Dashboard queries
+Product count, total stock, low-stock threshold, pending orders
+Summary values match fixture data
+
+4.4 Demo Schedule and Log
+Demonstration
+Timing
+Participants
+Scope and acceptance evidence
+Demo 1: foundation
+End of development iteration 1
+Developer, Admin, Owner
+Login, roles, database initialization, and dashboards
+Demo 2: inventory
+End of iteration 2
+Developer, Admin, Staff
+Products, batches, locations, stock adjustment, movement history, and alerts
+Demo 3: fulfillment
+End of iteration 3
+Developer, Staff, Owner
+Open order queue, FIFO allocation, order detail, and status workflow
+Demo 4: release candidate
+Before formal testing
+All stakeholders
+End-to-end receiving, picking, verification, reporting, error handling, and recovery
+Each demonstration uses a prepared script and representative data. The customer records accepted items, rejected items, questions, and required changes in a demo log. A rejected requirement is converted into a tracked change or defect; it is not silently deferred.
+Demo log template
+Date
+Build/version
+Scenario
+Demonstrated by
+Customer result
+Action owner
+Due date
+YYYY-MM-DD
+Version
+Scenario name
+Name
+Accepted / Rework
+Name
+YYYY-MM-DD
+
+
+
+
+

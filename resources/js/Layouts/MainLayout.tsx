@@ -171,10 +171,7 @@ export default function MainLayout({ children, title }: Props) {
                 return;
             }
 
-            router.reload({
-                preserveState: true,
-                preserveScroll: true,
-            });
+            router.reload();
         };
 
         // Live periodic poll every 5 seconds for instant cross-user dynamic updates
@@ -233,14 +230,14 @@ export default function MainLayout({ children, title }: Props) {
 
     const handleMarkAllRead = () => {
         router.post('/notifications/read-all', {}, {
-            preserveState: true,
+            
             preserveScroll: true,
         });
     };
 
     const handleNotificationClick = (notif: NotificationItem) => {
         if (!notif.is_read) {
-            router.post(`/notifications/${notif.id}/read`, {}, { preserveState: true, preserveScroll: true });
+            router.post(`/notifications/${notif.id}/read`, {}, {  preserveScroll: true });
         }
         setSelectedNotif(notif);
         setShowNotifications(false);
@@ -263,7 +260,7 @@ export default function MainLayout({ children, title }: Props) {
             password: profilePassword || undefined,
         }, {
             preserveScroll: true,
-            preserveState: true,
+            
             onSuccess: () => {
                 setIsProfileOpen(false);
                 setProfilePassword('');
@@ -283,18 +280,18 @@ export default function MainLayout({ children, title }: Props) {
 
     const navItems = [
         {
-            name: 'Sales & Purchase',
-            shortName: 'Sales & Purchase',
-            href: '/sales-purchase',
-            icon: TrendingUp,
-            active: url.startsWith('/sales-purchase') || url === '/',
-        },
-        {
             name: 'Inventory',
             shortName: 'Inventory',
             href: '/inventory',
             icon: Boxes,
-            active: url.startsWith('/inventory'),
+            active: url.startsWith('/inventory') || url === '/',
+        },
+        {
+            name: 'Sales & Purchase',
+            shortName: 'Sales & Purchase',
+            href: '/sales-purchase',
+            icon: TrendingUp,
+            active: url.startsWith('/sales-purchase'),
         },
         {
             name: 'Distributors',
@@ -330,7 +327,7 @@ export default function MainLayout({ children, title }: Props) {
                     <div className="flex items-center justify-between h-15 gap-4">
 
                         {/* Minimalist Brand Logo & Title */}
-                        <Link href="/" className="flex items-center space-x-2.5 group shrink-0" title={`${companyName} - Warehouse Inventory Management with Distributor Management and Dynamic Delivery Processing System`}>
+                        <Link href="/inventory" className="flex items-center space-x-2.5 group shrink-0" title={`${companyName} - Warehouse Inventory Management with Distributor Management and Dynamic Delivery Processing System`}>
                             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-green-700 flex items-center justify-center shadow-md shadow-emerald-900/20 border border-emerald-400/30 group-hover:scale-105 transition">
                                 <Warehouse className="h-4.5 w-4.5 text-white" />
                             </div>
@@ -623,7 +620,7 @@ export default function MainLayout({ children, title }: Props) {
 
             {/* NOTIFICATION DETAILS MODAL - "WHO DID THE ACTION" */}
             {selectedNotif && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-start justify-between border-b border-slate-800 pb-4 mb-4">
                             <div className="flex items-center gap-3">
@@ -722,7 +719,7 @@ export default function MainLayout({ children, title }: Props) {
 
             {/* MY PROFILE MODAL */}
             {isProfileOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100 animate-scale-up">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                             <div className="flex items-center gap-2">

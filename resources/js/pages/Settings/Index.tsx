@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import MainLayout from '@/Layouts/MainLayout';
+import ConfirmModal from '@/Components/ConfirmModal';
 import { 
     Settings, 
     Save, 
@@ -69,6 +70,8 @@ export default function SettingsIndex({ settings, users }: Props) {
     const [userRole, setUserRole] = useState<'admin' | 'owner' | 'checker'>('checker');
     const [userProcessing, setUserProcessing] = useState(false);
     const [userError, setUserError] = useState('');
+    const [userToArchive, setUserToArchive] = useState<UserItem | null>(null);
+    const [isArchivingUser, setIsArchivingUser] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -149,12 +152,7 @@ export default function SettingsIndex({ settings, users }: Props) {
     };
 
     const handleArchiveUser = (user: UserItem) => {
-        if (confirm(`Move user "${user.name}" to archive? They will be unable to log in until restored.`)) {
-            router.delete(`/settings/users/${user.id}`, {
-                preserveScroll: true,
-                preserveState: true,
-            });
-        }
+        setUserToArchive(user);
     };
 
     const handleRestoreUser = (user: UserItem) => {
@@ -441,7 +439,10 @@ export default function SettingsIndex({ settings, users }: Props) {
 
             {/* ADD / EDIT USER RBAC MODAL */}
             {isUserModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div 
+                    onClick={(e) => { if (e.target === e.currentTarget) setIsUserModalOpen(false); }}
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                >
                     <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-100">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -449,6 +450,7 @@ export default function SettingsIndex({ settings, users }: Props) {
                                 {editingUser ? 'Edit User & Role' : 'Create New System User'}
                             </h3>
                             <button
+                                type="button"
                                 onClick={() => setIsUserModalOpen(false)}
                                 className="text-slate-400 hover:text-white p-1 rounded-lg"
                             >
@@ -631,6 +633,30 @@ export default function SettingsIndex({ settings, users }: Props) {
                     </div>
                 </div>
             )}
+
+            {/* Confirm User Archive Modal */}
+            <ConfirmModal
+                isOpen={!!userToArchive}
+                title="Archive User Account"
+                message={`Are you sure you want to move user "${userToArchive?.name}" to the archive? They will be unable to log in until their account is restored.`}
+                confirmText="Move to Archive"
+                isLoading={isArchivingUser}
+                onConfirm={() => {
+                    if (!userToArchive) return;
+                    setIsArchivingUser(true);
+                    router.delete(`/settings/users/${userToArchive.id}`, {
+                        preserveScroll: true,
+                        preserveState: true,
+                        onFinish: () => {
+                            setIsArchivingUser(false);
+                            setUserToArchive(null);
+                        }
+                    });
+                }}
+                onCancel={() => {
+                    if (!isArchivingUser) setUserToArchive(null);
+                }}
+            />
         </MainLayout>
     );
 }

@@ -11,6 +11,7 @@ class NotificationController extends Controller
     {
         $notifications = $request->user()
             ->notifications()
+            ->with(['typeRelation', 'actor'])
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();

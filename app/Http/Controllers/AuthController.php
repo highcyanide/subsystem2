@@ -41,7 +41,7 @@ class AuthController extends Controller
 
             \App\Models\ActivityLog::log('login', 'User', $user->id, "User {$user->name} logged in.");
 
-            return redirect()->intended(route('sales-purchase.index'));
+            return redirect()->intended(route('inventory.index'));
         }
 
         return back()->withErrors([
@@ -72,7 +72,7 @@ class AuthController extends Controller
 
         Auth::login($user);
 
-        return redirect()->route('sales-purchase.index');
+        return redirect()->route('inventory.index');
     }
 
     public function logout(Request $request)
